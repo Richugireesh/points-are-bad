@@ -1,0 +1,251 @@
+{
+    "players": [
+        "richu",
+        "sam",
+        "danny"
+    ],
+    "races": [
+        {
+            "name": "Australian Grand Prix",
+            "actual_results": [
+                {
+                    "BroadcastName": "G RUSSELL",
+                    "FirstName": "George",
+                    "LastName": "Russell",
+                    "Abbreviation": "RUS"
+                },
+                {
+                    "BroadcastName": "K ANTONELLI",
+                    "FirstName": "Kimi",
+                    "LastName": "Antonelli",
+                    "Abbreviation": "ANT"
+                },
+                {
+                    "BroadcastName": "C LECLERC",
+                    "FirstName": "Charles",
+                    "LastName": "Leclerc",
+                    "Abbreviation": "LEC"
+                },
+                {
+                    "BroadcastName": "L HAMILTON",
+                    "FirstName": "Lewis",
+                    "LastName": "Hamilton",
+                    "Abbreviation": "HAM"
+                },
+                {
+                    "BroadcastName": "L NORRIS",
+                    "FirstName": "Lando",
+                    "LastName": "Norris",
+                    "Abbreviation": "NOR"
+                },
+                {
+                    "BroadcastName": "M VERSTAPPEN",
+                    "FirstName": "Max",
+                    "LastName": "Verstappen",
+                    "Abbreviation": "VER"
+                },
+                {
+                    "BroadcastName": "O BEARMAN",
+                    "FirstName": "Oliver",
+                    "LastName": "Bearman",
+                    "Abbreviation": "BEA"
+                },
+                {
+                    "BroadcastName": "A LINDBLAD",
+                    "FirstName": "Arvid",
+                    "LastName": "Lindblad",
+                    "Abbreviation": "LIN"
+                },
+                {
+                    "BroadcastName": "G BORTOLETO",
+                    "FirstName": "Gabriel",
+                    "LastName": "Bortoleto",
+                    "Abbreviation": "BOR"
+                },
+                {
+                    "BroadcastName": "P GASLY",
+                    "FirstName": "Pierre",
+                    "LastName": "Gasly",
+                    "Abbreviation": "GAS"
+                }
+            ],
+            "predictions": {
+                "richu": [
+                    "Rus",
+                    "\u2060kimi",
+                    "\u2060lec",
+                    "\u2060pia",
+                    "\u2060ver",
+                    "\u2060hadjar",
+                    "\u2060ham",
+                    "\u2060nor",
+                    "\u2060linblad",
+                    "Gabby"
+                ],
+                "sam": [
+                    "Rus",
+                    "Lec",
+                    "Pia",
+                    "hadj",
+                    "Hamilton",
+                    "kimi",
+                    "Nor",
+                    "max",
+                    "Lind",
+                    "Bor"
+                ],
+                "danny": [
+                    "Pia",
+                    "Rus",
+                    "Hadj",
+                    "Lec",
+                    "Max",
+                    "kimi",
+                    "Norris",
+                    "Hamilton",
+                    "Alonso",
+                    "Perez"
+                ]
+            },
+            "date": "2026-03-08"
+        },
+        {
+            "name": "Chinese Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-03-15"
+        },
+        {
+            "name": "Japanese Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-03-29"
+        },
+        {
+            "name": "Bahrain Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-04-12"
+        },
+        {
+            "name": "Saudi Arabian Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-04-19"
+        },
+        {
+            "name": "Miami Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-05-03"
+        },
+        {
+            "name": "Canadian Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-05-24"
+        },
+        {
+            "name": "Monaco Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-06-07"
+        },
+        {
+            "name": "Barcelona Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-06-14"
+        },
+        {
+            "name": "Austrian Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-06-28"
+        },
+        {
+            "name": "British Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-07-05"
+        },
+        {
+            "name": "Belgian Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-07-19"
+        },
+        {
+            "name": "Hungarian Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-07-26"
+        },
+        {
+            "name": "Dutch Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-08-23"
+        },
+        {
+            "name": "Italian Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-09-06"
+        },
+        {
+            "name": "Spanish Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-09-13"
+        },
+        {
+            "name": "Azerbaijan Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-09-26"
+        },
+        {
+            "name": "Singapore Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-10-11"
+        },
+        {
+            "name": "United States Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-10-25"
+        },
+        {
+            "name": "Mexico City Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-11-01"
+        },
+        {
+            "name": "S\u00e3o Paulo Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-11-08"
+        },
+        {
+            "name": "Las Vegas Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-11-21"
+        },
+        {
+            "name": "Qatar Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-11-29"
+        },
+        {
+            "name": "Abu Dhabi Grand Prix",
+            "actual_results": [],
+            "predictions": {},
+            "date": "2026-12-06"
+        }
+    ]
+}
