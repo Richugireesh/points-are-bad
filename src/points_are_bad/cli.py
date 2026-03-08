@@ -15,7 +15,22 @@ except ImportError:
 import urllib.request
 import urllib.error
 
+from textual.app import App, ComposeResult
+from textual.screen import Screen, ModalScreen
+from textual.widgets import (
+    Header, Footer, ListView, ListItem, Label, Button,
+    Input, TextArea, DataTable, LoadingIndicator, Static, Markdown
+)
+from textual.containers import Vertical, Horizontal, VerticalScroll, Center
+from textual.binding import Binding
+from textual import work
+from rich.text import Text
+
 DATA_FILE = "points_are_bad_data.json"
+
+# ─────────────────────────────────────────────
+#  Data helpers (unchanged logic)
+# ─────────────────────────────────────────────
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -27,562 +42,41 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
-
 def parse_raw_input_lines(lines, max_items):
     text = "\n".join(lines)
-    # Remove hidden characters like Word Joiner or Zero Width Space
     text = text.replace('\u2060', '').replace('\u200b', '')
-    # Replace common list numbering like "1.", "2)", "3 ." with a delimiter "|"
     cleaned_text = re.sub(r'\d+\s*[.)]', '|', text)
-    
     parts = []
-    # Split by the new delimiter, newlines, or commas
     for chunk in re.split(r'[|\n,]', cleaned_text):
         chunk = chunk.strip()
-        # Clean up stray left over parenthesis if they typed "(1)"
         if chunk.startswith('('):
             chunk = chunk[1:].strip()
         if chunk:
             parts.append(chunk)
-            
     return parts[:max_items]
 
-def get_input_list(prompt, min_items=10, max_items=10):
-    print(prompt)
-    print("(You can paste a list directly here, or type them one by one. Press Enter on an empty line to finish.)")
-    
-    lines = []
-    while True:
-        try:
-            line = input(f"  {len(lines)+1}. " if len(lines) < max_items else "  ... ").strip()
-        except EOFError:
-            break
-            
-        if not line:
-            if len(lines) == 0:
-                continue
-            parsed = parse_raw_input_lines(lines, max_items)
-            if len(parsed) >= min_items:
-                break
-                
-            confirm = input(f"You only entered {len(parsed)} items. Are you sure you're done? (y/n): ").strip().lower()
-            if confirm == 'y':
-                break
-            else:
-                continue
-                
-        lines.append(line)
-        parsed = parse_raw_input_lines(lines, max_items)
-        if len(parsed) >= max_items:
-            break
-            
-    return parse_raw_input_lines(lines, max_items)
-
-def select_item(items, item_name, display_func=str):
-    if not items:
-        input(f"No {item_name}s exist. Please add a {item_name} first. Press Enter...")
-        return None
-        
-    print(f"\nAvailable {item_name}s:")
-    for i, item in enumerate(items):
-        print(f"{i+1}. {display_func(item)}")
-        
-    try:
-        idx = int(input(f"\nSelect a {item_name} by number: ")) - 1
-        if not (0 <= idx < len(items)):
-            raise ValueError()
-        return items[idx]
-    except ValueError:
-        input(f"Invalid {item_name} selection. Press Enter...")
-        return None
-
-def auto_update_past_races(data):
-    today = datetime.datetime.now().date().isoformat()
-    updated = False
-    
-    # We'll need to briefly inform the user if we perform an update
-    first_update = True
-    
-    for race in data["races"]:
-        r_date = race.get("date")
-        if r_date and r_date <= today and not race["actual_results"]:
-            if first_update:
-                clear_screen()
-                print("=== Performing Auto-Updates ===")
-                first_update = False
-                
-            print(f"Fetching missing results for completed race: {race['name']} ({r_date})...")
-            year = int(r_date[:4])
-            fetched = fetch_fastf1_results(year, race['name']) if HAS_FASTF1 else None
-            
-            if not fetched:
-                fetched = fetch_openf1_results(year, race['name'])
-                
-            if fetched:
-                race["actual_results"] = fetched
-                updated = True
-                print(f" -> Successfully saved results for {race['name']}!\n")
-            else:
-                print(f" -> Could not fetch results yet.\n")
-                
-    if updated:
-        save_data(data)
-    if not first_update:
-        input("Press Enter to continue to the Main Menu...")
-
-def main_menu():
-    data = load_data()
-    auto_update_past_races(data)
-    
-    while True:
-        clear_screen()
-        print("=== Points are Bad: F1 Prediction Game ===")
-        print("1. Manage Players")
-        print("2. Manage Races")
-        print("3. Enter Predictions")
-        print("4. Enter Actual Race Results")
-        print("5. View Race Results & Points")
-        print("6. View Season Standings")
-        print("7. Exit")
-        
-        choice = input("\nSelect an option: ").strip()
-        
-        if choice == '1':
-            manage_players(data)
-        elif choice == '2':
-            manage_races(data)
-        elif choice == '3':
-            enter_predictions(data)
-        elif choice == '4':
-            enter_results(data)
-        elif choice == '5':
-            view_race_points(data)
-        elif choice == '6':
-            view_standings(data)
-        elif choice == '7':
-            save_data(data)
-            print("Scores saved! Exiting...")
-            sys.exit(0)
-        else:
-            input("Invalid choice. Press Enter to try again.")
-
-def manage_players(data):
-    while True:
-        clear_screen()
-        print("--- Manage Players ---")
-        if not data["players"]:
-            print("No players added yet.")
-        else:
-            print("Current players:")
-            for p in data["players"]:
-                print(f" - {p}")
-        
-        print("\n1. Add Player")
-        print("2. Remove Player")
-        print("3. Back to Main Menu")
-        choice = input("Select an option: ").strip()
-        
-        if choice == '1':
-            name = input("Enter player name: ").strip()
-            if name and name not in data["players"]:
-                data["players"].append(name)
-                save_data(data)
-                print(f"Player '{name}' added!")
-            elif name in data["players"]:
-                print("Player already exists.")
-            input("Press Enter to continue...")
-        elif choice == '2':
-            name = input("Enter player name to remove: ").strip()
-            if name in data["players"]:
-                data["players"].remove(name)
-                save_data(data)
-                print(f"Player '{name}' removed!")
-            else:
-                print("Player not found.")
-            input("Press Enter to continue...")
-        elif choice == '3':
-            break
-
-def manage_races(data):
-    while True:
-        clear_screen()
-        print("--- Manage Races ---")
-        if not data["races"]:
-            print("No races added yet.")
-        else:
-            print("Current races:")
-            for r in data["races"]:
-                print(f" - {r['name']}")
-                
-        print("\n1. Add Race")
-        print("2. Remove Race")
-        print("3. Auto-populate Current Season Schedule (FastF1)")
-        print("4. Back to Main Menu")
-        choice = input("Select an option: ").strip()
-        
-        if choice == '1':
-            name = input("Enter race name (e.g. 'Bahrain GP'): ").strip()
-            # check if exists
-            if any(r['name'].lower() == name.lower() for r in data["races"]):
-                print("Race already exists.")
-            elif name:
-                date_str = input("Enter race date (YYYY-MM-DD) or leave blank: ").strip()
-                data["races"].append({
-                    "name": name,
-                    "date": date_str,
-                    "actual_results": [],
-                    "predictions": {}
-                })
-                save_data(data)
-                print(f"Race '{name}' added!")
-            input("Press Enter to continue...")
-        elif choice == '2':
-            name = input("Enter race name to remove: ").strip()
-            found = False
-            for r in data["races"]:
-                if r['name'].lower() == name.lower():
-                    data["races"].remove(r)
-                    save_data(data)
-                    print(f"Race '{r['name']}' removed!")
-                    found = True
-                    break
-            if not found:
-                print("Race not found.")
-            input("Press Enter to continue...")
-        elif choice == '3':
-            auto_populate_schedule(data)
-        elif choice == '4':
-            break
-
-def auto_populate_schedule(data):
-    if not HAS_FASTF1:
-        input("\nFastF1 is not installed. Please install it to use this feature. Press Enter...")
-        return
-        
-    year = datetime.datetime.now().year
-    print(f"\nFetching official F1 schedule for {year}...")
-    try:
-        cache_dir = os.path.abspath('fastf1_cache')
-        os.makedirs(cache_dir, exist_ok=True)
-        fastf1.Cache.enable_cache(cache_dir)
-        
-        schedule = fastf1.get_event_schedule(year)
-        races = schedule[schedule['EventFormat'] != 'testing']
-        
-        added_count = 0
-        existing_names = [r['name'].lower() for r in data["races"]]
-        
-        for _, row in races.iterrows():
-            race_name = row.get('EventName')
-            event_date = row.get('EventDate')
-            date_str = str(event_date.date()) if hasattr(event_date, 'date') else ""
-            
-            existing_race = next((r for r in data["races"] if r['name'].lower() == race_name.lower()), None)
-            
-            if existing_race:
-                if not existing_race.get('date') and date_str:
-                    existing_race['date'] = date_str
-                    added_count += 1
-                    print(f" Updated Date: {race_name} -> {date_str}")
-            elif race_name:
-                data["races"].append({
-                    "name": race_name,
-                    "date": date_str,
-                    "actual_results": [],
-                    "predictions": {}
-                })
-                added_count += 1
-                print(f" Added: {race_name} ({date_str})")
-                
-        if added_count > 0:
-            save_data(data)
-            print(f"\nSuccessfully updated {added_count} races in the schedule!")
-        else:
-            print("\nSchedule is already up to date. No new races added.")
-            
-    except Exception as e:
-        print(f"Error fetching schedule: {e}")
-        
-    input("Press Enter to continue...")
-
-def enter_predictions(data):
-    clear_screen()
-    print("--- Enter Predictions ---")
-    
-    today = datetime.datetime.now().date().isoformat()
-    upcoming_races = [r for r in data["races"] if not r.get("actual_results") and (not r.get("date") or r["date"] >= today)]
-    upcoming_races.sort(key=lambda x: x.get("date", "9999-12-31"))
-    
-    if not upcoming_races:
-        input("No upcoming races to predict for. Press Enter...")
-        return
-        
-    def display_upcoming(r):
-        base = f"{r['name']} (Date: {r.get('date', 'Unknown')})"
-        if r == upcoming_races[0]:
-            return f"{base} [NEXT UPCOMING]"
-        return base
-        
-    race = select_item(upcoming_races, "upcoming race", display_upcoming)
-    if not race:
-        return
-        
-    player = select_item(data["players"], "player")
-    if not player:
-        return
-    
-    if player in race["predictions"]:
-        print("\nWARNING: Prediction already exists for this player and race!")
-        overwrite = input("Do you want to overwrite? (y/n): ").strip().lower()
-        if overwrite != 'y':
-            return
-            
-    print(f"\nEnter top 10 prediction for {player} at {race['name']}:")
-    print("Enter the names of the drivers (e.g., 'Verstappen', 'Max', 'VER' etc.)")
-    print("Be consistent with naming to make checking easier.")
-    
-    prediction = get_input_list("Top 10:", max_items=10)
-    race["predictions"][player] = prediction
-    save_data(data)
-    input(f"\nPrediction for {player} saved successfully! Press Enter...")
-
-def fetch_fastf1_results(year, race_name):
-    if not HAS_FASTF1:
-        return None
-    print(f"\nFetching official FastF1 data for {race_name} ({year})...")
-    try:
-        cache_dir = os.path.abspath('fastf1_cache')
-        os.makedirs(cache_dir, exist_ok=True)
-        fastf1.Cache.enable_cache(cache_dir)
-        
-        session = fastf1.get_session(year, race_name, 'R')
-        session.load(telemetry=False, laps=False, weather=False)
-        
-        if 'Position' not in session.results.columns or session.results['Position'].isnull().all():
-            print("\n[!] Official race results are not yet available for this session in FastF1.")
-            return None
-            
-        results = session.results.dropna(subset=['Position']).sort_values(by='Position').head(10)
-        drivers = []
-        for _, row in results.iterrows():
-            drivers.append({
-                "BroadcastName": str(row.get("BroadcastName", "")),
-                "FirstName": str(row.get("FirstName", "")),
-                "LastName": str(row.get("LastName", "")),
-                "Abbreviation": str(row.get("Abbreviation", ""))
-            })
-        return drivers
-    except Exception as e:
-        print(f"Error fetching FastF1 data: {e}")
-        return None
-
-def _fetch_openf1_json(url):
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 points-are-bad/1.0'})
-        with urllib.request.urlopen(req, timeout=10) as response:
-            if response.status != 200:
-                return None
-            return json.loads(response.read().decode())
-    except Exception as e:
-        print(f"Error fetching {url}: {e}")
-        return None
-
-def fetch_openf1_results(year, race_name):
-    print(f"\nAttempting to fetch from OpenF1 API for {race_name} ({year})...")
-    try:
-        # First get the meeting key for this specific race
-        meetings_url = f"https://api.openf1.org/v1/meetings?year={year}"
-        meetings = _fetch_openf1_json(meetings_url)
-        if not meetings:
-            return None
-            
-        target_meeting = None
-        for m in meetings:
-            if m.get('meeting_name', '').lower() in race_name.lower() or race_name.lower() in m.get('meeting_name', '').lower():
-                target_meeting = m
-                break
-                
-        if not target_meeting:
-            # Fallback fuzzy matching
-            for m in meetings:
-                if m.get('country_name', '').lower() in race_name.lower() or m.get('location', '').lower() in race_name.lower():
-                    target_meeting = m
-                    break
-                    
-        if not target_meeting:
-            print(f"[!] Could not find meeting matching '{race_name}' in OpenF1.")
-            return None
-            
-        meeting_key = target_meeting['meeting_key']
-        
-        # Now get the Race session for this meeting
-        session_url = f"https://api.openf1.org/v1/sessions?meeting_key={meeting_key}&session_type=Race"
-        sessions = _fetch_openf1_json(session_url)
-        
-        if not sessions or (isinstance(sessions, dict) and 'detail' in sessions):
-            print(f"[!] Could not find a Race session for meeting {target_meeting.get('meeting_name')}.")
-            return None
-            
-        target_session = sessions[0]
-        session_key = target_session['session_key']
-        print(f"Found OpenF1 session: {target_meeting.get('meeting_name')} - {target_session.get('session_name')} (Key: {session_key})")
-        
-        # Now fetch the actual session results
-        res_url = f"https://api.openf1.org/v1/session_result?session_key={session_key}&position<=10"
-        res_data = _fetch_openf1_json(res_url)
-        
-        if isinstance(res_data, dict) and 'detail' in res_data:
-            print(f"[!] OpenF1 API Info: {res_data['detail']}")
-            return None
-            
-        if not res_data:
-             print("[!] OpenF1 does not have session_results populated yet.")
-             return None
-             
-        sorted_results = sorted(res_data, key=lambda x: x['position'])
-        
-        # Get driver metadata for the entire meeting to ensure we get non-null names
-        drivers_url = f"https://api.openf1.org/v1/drivers?meeting_key={meeting_key}"
-        drivers_data = _fetch_openf1_json(drivers_url)
-             
-        driver_map = {}
-        if isinstance(drivers_data, list):
-            for d in drivers_data:
-                d_num = str(d.get('driver_number', ''))
-                # Only map if it has a valid broadcast or full name, or if it's the first time
-                if d_num not in driver_map or d.get('broadcast_name') or d.get('full_name'):
-                    if d.get('broadcast_name') or d.get('full_name') or d_num not in driver_map:
-                        driver_map[d_num] = d
-                
-        results = []
-        for res in sorted_results[:10]:
-            driver_id = str(res['driver_number'])
-            driver_info = driver_map.get(driver_id, {})
-            b_name = driver_info.get("broadcast_name") or driver_info.get("full_name") or str(driver_id)
-            results.append({
-                "BroadcastName": b_name,
-                "FirstName": driver_info.get("first_name") or "",
-                "LastName": driver_info.get("last_name") or "",
-                "Abbreviation": driver_info.get("name_acronym") or ""
-            })
-            
-        return results
-    except Exception as e:
-        print(f"OpenF1 fetching error: {e}")
-        return None
-
-def enter_results(data):
-    clear_screen()
-    print("--- Enter Actual Race Results ---")
-    
-    today = datetime.datetime.now().date().isoformat()
-    past_races = [r for r in data["races"] if r.get("date") and r["date"] <= today]
-    past_races.sort(key=lambda x: x.get("date", "0000-00-00"))
-    
-    if not past_races:
-        input("No completed races available yet. Press Enter...")
-        return
-        
-    def display_past(r):
-        status = "(Results Logged)" if r.get("actual_results") else "(Needs Results!)"
-        return f"{r['name']} (Date: {r.get('date', 'Unknown')}) {status}"
-        
-    race = select_item(past_races, "completed race", display_past)
-    if not race:
-        return
-    
-    if race["actual_results"]:
-        print("\nWARNING: Actual results already exist for this race!")
-        overwrite = input("Do you want to overwrite? (y/n): ").strip().lower()
-        if overwrite != 'y':
-            return
-            
-    choice = input("\nDo you want to fetch results automatically using Official F1 APIs? (y/n): ").strip().lower()
-    if choice == 'y':
-        try:
-            year = int(input("Enter the race year (e.g. 2024): ").strip())
-            fetched = fetch_fastf1_results(year, race['name']) if HAS_FASTF1 else None
-            
-            if not fetched: # Always fallback to OpenF1 if FastF1 fails or isn't installed
-                fetched = fetch_openf1_results(year, race['name'])
-                
-            if fetched:
-                print("\nSuccessfully fetched Top 10:")
-                for i, d in enumerate(fetched):
-                    print(f"  {i+1}. {d['BroadcastName']}")
-                confirm = input("\nSave these results? (y/n): ").strip().lower()
-                if confirm == 'y':
-                    race["actual_results"] = fetched
-                    save_data(data)
-                    input(f"\nActual results for {race['name']} saved! Press Enter...")
-                    return
-            else:
-                print("Could not fetch data. Falling back to manual entry.")
-        except ValueError:
-            print("Invalid year. Falling back to manual entry.")
-                
-    print(f"\nEnter the TOP 10 actual race results for {race['name']}:")
-    print("IMPORTANT: Try to use names identically to what players typed,")
-    print("However the system will ignore case spaces temporarily.")
-    
-    actual = get_input_list("Top 10:", max_items=10)
-    race["actual_results"] = actual
-    save_data(data)
-    input(f"\nActual results for {race['name']} saved! Press Enter...")
-
 def calculate_str_equality(a, b):
-    # a is prediction, b is either string or dict (fastf1)
     p = str(a).strip().lower()
-    # Remove any word joiner or invisible characters that sometimes appear when pasting
     p = p.replace('\u2060', '').replace('\u200b', '').strip()
-    
     aliases = {
-        "kimi": "antonelli",
-        "lec": "leclerc",
-        "ver": "verstappen",
-        "max": "verstappen",
-        "ham": "hamilton",
-        "nor": "norris",
-        "pia": "piastri",
-        "rus": "russell",
-        "lind": "lindblad",
-        "linblad": "lindblad",
-        "bor": "bortoleto",
-        "gabby": "bortoleto",
-        "gab": "bortoleto",
-        "hadj": "hadjar",
-        "alo": "alonso",
-        "per": "perez",
-        "checo": "perez",
-        "gas": "gasly",
-        "oco": "ocon",
-        "tsu": "tsunoda",
-        "yuki": "tsunoda",
-        "hul": "hulkenberg",
-        "str": "stroll",
-        "mag": "magnussen",
-        "alb": "albon",
-        "col": "colapinto",
-        "bea": "bearman",
-        "ollie": "bearman",
-        "sai": "sainz",
-        "zho": "zhou",
-        "bot": "bottas",
-        "law": "lawson",
-        "doo": "doohan"
+        "kimi": "antonelli", "lec": "leclerc", "ver": "verstappen",
+        "max": "verstappen", "ham": "hamilton", "nor": "norris",
+        "pia": "piastri", "rus": "russell", "lind": "lindblad",
+        "linblad": "lindblad", "bor": "bortoleto", "gabby": "bortoleto",
+        "gab": "bortoleto", "hadj": "hadjar", "alo": "alonso",
+        "per": "perez", "checo": "perez", "gas": "gasly", "oco": "ocon",
+        "tsu": "tsunoda", "yuki": "tsunoda", "hul": "hulkenberg",
+        "str": "stroll", "mag": "magnussen", "alb": "albon",
+        "col": "colapinto", "bea": "bearman", "ollie": "bearman",
+        "sai": "sainz", "zho": "zhou", "bot": "bottas",
+        "law": "lawson", "doo": "doohan"
     }
-    
     if p in aliases:
         p = aliases[p]
-
     if isinstance(b, dict):
-        # Exact match of any field
         for val in b.values():
             if val and p == str(val).strip().lower():
                 return True
-        # Substring match on BroadcastName or LastName
         for val in b.values():
             if val and p in str(val).strip().lower():
                 return True
@@ -595,105 +89,1014 @@ def calculate_str_equality(a, b):
 
 def calculate_player_points_for_race(prediction, actual):
     points = 0
-    # Both lists should be length 10
     for i in range(min(len(prediction), len(actual))):
         if not calculate_str_equality(prediction[i], actual[i]):
             points += 1
-    # Adding points for missing predictions or results up to 10
     diff = abs(len(prediction) - len(actual))
-    points += diff 
+    points += diff
     return points
 
-def view_race_points(data):
-    clear_screen()
-    print("--- View Race Points ---")
-    
-    today = datetime.datetime.now().date().isoformat()
-    sorted_races = sorted(data["races"], key=lambda x: x.get("date", "9999-12-31"))
-    
-    def display_race(r):
-        status = "(Results Added)" if r.get("actual_results") else "(No Results Yet)"
-        is_past = "[COMPLETED]" if r.get("actual_results") or (r.get("date") and r["date"] < today) else "[UPCOMING]"
-        return f"{r['name']} {is_past} - {status}"
-        
-    race = select_item(sorted_races, "race", display_race)
-    if not race:
-        return
-    actual = race["actual_results"]
-    
-    print(f"\n--- {race['name']} Points ---")
-    if not actual:
-        print("Actual results not yet added for this race. Cannot calculate points.")
-    else:
-        if not race["predictions"]:
-            print("No predictions were made for this race.")
-        else:
-            print("Scores (Lower is better!):")
-            for player, prediction in race["predictions"].items():
-                pts = calculate_player_points_for_race(prediction, actual)
-                print(f" - {player}: {pts} points")
-                
-            print("\nBreakdown for each player:")
-            for player, prediction in race["predictions"].items():
-                print(f"\n{player}'s Prediction Breakdown:")
-                pts = 0
-                for i in range(10):
-                    pred = prediction[i] if i < len(prediction) else "(None)"
-                    
-                    if i < len(actual):
-                        act_val = actual[i]
-                        act = act_val.get("BroadcastName", str(act_val)) if isinstance(act_val, dict) else str(act_val)
-                    else:
-                        act = "(None)"
-                        
-                    if calculate_str_equality(pred, actual[i] if i < len(actual) else "(None)"):
-                        print(f"  P{i+1}: {act} [CORRECT]")
-                    else:
-                        print(f"  P{i+1}: Predicted {pred}, Actual was {act} [+1 Point]")
-                        pts += 1
-                print(f"  Total for {player}: {pts} points")
-                
-    input("\nPress Enter to continue...")
+def fetch_fastf1_results(year, race_name):
+    if not HAS_FASTF1:
+        return None
+    try:
+        cache_dir = os.path.abspath('fastf1_cache')
+        os.makedirs(cache_dir, exist_ok=True)
+        fastf1.Cache.enable_cache(cache_dir)
+        session = fastf1.get_session(year, race_name, 'R')
+        session.load(telemetry=False, laps=False, weather=False)
+        if 'Position' not in session.results.columns or session.results['Position'].isnull().all():
+            return None
+        results = session.results.dropna(subset=['Position']).sort_values(by='Position').head(10)
+        drivers = []
+        for _, row in results.iterrows():
+            drivers.append({
+                "BroadcastName": str(row.get("BroadcastName", "")),
+                "FirstName": str(row.get("FirstName", "")),
+                "LastName": str(row.get("LastName", "")),
+                "Abbreviation": str(row.get("Abbreviation", ""))
+            })
+        return drivers
+    except Exception:
+        return None
 
-def view_standings(data):
-    clear_screen()
-    print("=== SEASON STANDINGS (Lowest Points = WINNING) ===")
-    
-    player_scores = {p: 0 for p in data["players"]}
-    
-    races_counted = 0
-    for race in data["races"]:
-        actual = race["actual_results"]
-        if actual:
-            races_counted += 1
-            for player, prediction in race["predictions"].items():
-                # Add score if player exists and made prediction
-                if player in player_scores:
-                    pts = calculate_player_points_for_race(prediction, actual)
-                    player_scores[player] += pts
-                # What if they didn't predict? They should probably get max points (10)?
-                # Or maybe 10 points penalty if missing prediction?
-            
-            # For players who didn't predict this round but are part of the game:
-            for player in data["players"]:
-                if player not in race["predictions"]:
-                    player_scores[player] += 10 # 10 penalty for not predicting
-                    
-    # Sort by lowest score
-    sorted_players = sorted(player_scores.items(), key=lambda x: x[1])
-    
-    print(f"\nStandings after {races_counted} race(s) with actual results:")
-    print("-------------------------------------------------")
-    for i, (player, score) in enumerate(sorted_players):
-        print(f"{i+1}. {player} - {score} points")
-    print("-------------------------------------------------")
-    print("* Note: Missing a prediction for a completed race gives you +10 points.")
-    
-    input("\nPress Enter to continue...")
+def _fetch_openf1_json(url):
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 points-are-bad/1.0'})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            if response.status != 200:
+                return None
+            return json.loads(response.read().decode())
+    except Exception:
+        return None
+
+def fetch_openf1_results(year, race_name):
+    try:
+        meetings_url = f"https://api.openf1.org/v1/meetings?year={year}"
+        meetings = _fetch_openf1_json(meetings_url)
+        if not meetings:
+            return None
+        target_meeting = None
+        for m in meetings:
+            if m.get('meeting_name', '').lower() in race_name.lower() or race_name.lower() in m.get('meeting_name', '').lower():
+                target_meeting = m
+                break
+        if not target_meeting:
+            for m in meetings:
+                if m.get('country_name', '').lower() in race_name.lower() or m.get('location', '').lower() in race_name.lower():
+                    target_meeting = m
+                    break
+        if not target_meeting:
+            return None
+        meeting_key = target_meeting['meeting_key']
+        session_url = f"https://api.openf1.org/v1/sessions?meeting_key={meeting_key}&session_type=Race"
+        sessions = _fetch_openf1_json(session_url)
+        if not sessions or (isinstance(sessions, dict) and 'detail' in sessions):
+            return None
+        target_session = sessions[0]
+        session_key = target_session['session_key']
+        res_url = f"https://api.openf1.org/v1/session_result?session_key={session_key}&position<=10"
+        res_data = _fetch_openf1_json(res_url)
+        if isinstance(res_data, dict) and 'detail' in res_data:
+            return None
+        if not res_data:
+            return None
+        sorted_results = sorted(res_data, key=lambda x: x['position'])
+        drivers_url = f"https://api.openf1.org/v1/drivers?meeting_key={meeting_key}"
+        drivers_data = _fetch_openf1_json(drivers_url)
+        driver_map = {}
+        if isinstance(drivers_data, list):
+            for d in drivers_data:
+                d_num = str(d.get('driver_number', ''))
+                if d_num not in driver_map or d.get('broadcast_name') or d.get('full_name'):
+                    driver_map[d_num] = d
+        results = []
+        for res in sorted_results[:10]:
+            driver_id = str(res['driver_number'])
+            driver_info = driver_map.get(driver_id, {})
+            b_name = driver_info.get("broadcast_name") or driver_info.get("full_name") or str(driver_id)
+            results.append({
+                "BroadcastName": b_name,
+                "FirstName": driver_info.get("first_name") or "",
+                "LastName": driver_info.get("last_name") or "",
+                "Abbreviation": driver_info.get("name_acronym") or ""
+            })
+        return results
+    except Exception:
+        return None
+
+# ─────────────────────────────────────────────
+#  Shared UI helpers
+# ─────────────────────────────────────────────
+
+TITLE = "Points Are Bad 🏎"
+SUBTITLE = "F1 Prediction Game"
+
+CSS = """
+/* ── Global ────────────────────────────── */
+Screen {
+    background: $surface;
+}
+
+/* ── Menu list ──────────────────────────── */
+#menu-list {
+    width: 60;
+    height: auto;
+    border: round $primary;
+    padding: 1 2;
+    margin: 1 0;
+    background: $panel;
+}
+
+#menu-list ListItem {
+    padding: 0 1;
+    margin: 0;
+}
+
+#menu-list ListItem:hover {
+    background: $primary 30%;
+}
+
+#menu-list ListItem.--highlight {
+    background: $primary 60%;
+    color: $text;
+}
+
+/* ── Screen titles ──────────────────────── */
+.screen-title {
+    text-style: bold;
+    color: $primary;
+    text-align: center;
+    padding: 1 0;
+    width: 100%;
+}
+
+.subtitle {
+    color: $text-muted;
+    text-align: center;
+    width: 100%;
+    margin-bottom: 1;
+}
+
+/* ── Cards / panels ─────────────────────── */
+.card {
+    border: round $accent;
+    padding: 1 2;
+    margin: 1 2;
+    background: $panel;
+    height: auto;
+}
+
+/* ── Buttons ─────────────────────────────── */
+.btn-row {
+    height: 3;
+    align: center middle;
+    margin-top: 1;
+}
+
+Button {
+    margin: 0 1;
+}
+
+Button.primary-btn {
+    background: $primary;
+}
+
+Button.danger-btn {
+    background: $error;
+}
+
+/* ── Inputs ──────────────────────────────── */
+Input {
+    margin: 0 0 1 0;
+}
+
+.field-label {
+    color: $text-muted;
+    margin-bottom: 0;
+    padding: 0;
+}
+
+/* ── Data table ─────────────────────────── */
+DataTable {
+    height: 1fr;
+    margin: 0 2;
+}
+
+/* ── TextArea for paste ─────────────────── */
+#paste-area {
+    height: 16;
+    margin: 0 2 1 2;
+    border: round $accent;
+}
+
+/* ── Loading overlay ─────────────────────── */
+LoadingIndicator {
+    height: 100%;
+    background: $panel 70%;
+}
+
+/* ── Status bar inside screens ───────────── */
+.status-bar {
+    color: $success;
+    text-align: center;
+    height: 1;
+    margin-top: 1;
+}
+
+.error-bar {
+    color: $error;
+    text-align: center;
+    height: 1;
+    margin-top: 1;
+}
+
+/* ── Standings ───────────────────────────── */
+.trophy {
+    text-align: center;
+    color: $warning;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+/* ── Modal confirm ──────────────────────── */
+ConfirmModal {
+    align: center middle;
+}
+
+#confirm-box {
+    width: 60;
+    height: auto;
+    border: round $warning;
+    padding: 2 4;
+    background: $panel;
+}
+
+#confirm-msg {
+    text-align: center;
+    margin-bottom: 2;
+    color: $text;
+}
+
+.confirm-buttons {
+    align: center middle;
+    height: 3;
+}
+
+/* ── Race detail breakdown ──────────────── */
+.breakdown-header {
+    text-style: bold;
+    color: $accent;
+    margin-top: 1;
+    padding: 0 2;
+}
+
+.correct-row {
+    color: $success;
+    padding: 0 4;
+}
+
+.wrong-row {
+    color: $error;
+    padding: 0 4;
+}
+"""
+
+
+# ─────────────────────────────────────────────
+#  Confirm Modal
+# ─────────────────────────────────────────────
+
+class ConfirmModal(ModalScreen):
+    """A yes/no confirmation dialog."""
+
+    BINDINGS = [Binding("escape", "dismiss(False)", "Cancel")]
+
+    def __init__(self, message: str, **kwargs):
+        super().__init__(**kwargs)
+        self.message = message
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="confirm-box"):
+            yield Label(self.message, id="confirm-msg")
+            with Horizontal(classes="confirm-buttons"):
+                yield Button("Yes", id="yes-btn", variant="success")
+                yield Button("No", id="no-btn", variant="error")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss(event.button.id == "yes-btn")
+
+
+# ─────────────────────────────────────────────
+#  Main Menu
+# ─────────────────────────────────────────────
+
+MENU_ITEMS = [
+    ("👤  Manage Players",         "players"),
+    ("🏁  Manage Races",            "races"),
+    ("🔮  Enter Predictions",       "predict"),
+    ("📋  Enter Actual Results",    "results"),
+    ("📊  View Race Points",        "view_race"),
+    ("🏆  Season Standings",        "standings"),
+    ("🚪  Exit",                    "exit"),
+]
+
+class MainMenuScreen(Screen):
+    BINDINGS = [Binding("q", "quit_app", "Quit")]
+
+    CSS = """
+    MainMenuScreen {
+        align: center middle;
+    }
+
+    #main-card {
+        width: 64;
+        height: auto;
+        border: double $primary;
+        padding: 1 3 2 3;
+        background: $panel;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with Vertical(id="main-card"):
+            yield Label(TITLE, classes="screen-title")
+            yield Label(SUBTITLE, classes="subtitle")
+            yield ListView(
+                *[ListItem(Label(name), id=f"menu-{key}") for name, key in MENU_ITEMS],
+                id="menu-list",
+            )
+        yield Footer()
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        item_id = event.item.id or ""
+        key = item_id.replace("menu-", "")
+        dispatch = {
+            "players":   lambda: self.app.push_screen(ManagePlayersScreen()),
+            "races":     lambda: self.app.push_screen(ManageRacesScreen()),
+            "predict":   lambda: self.app.push_screen(EnterPredictionsScreen()),
+            "results":   lambda: self.app.push_screen(EnterResultsScreen()),
+            "view_race": lambda: self.app.push_screen(ViewRacePointsScreen()),
+            "standings": lambda: self.app.push_screen(StandingsScreen()),
+            "exit":      lambda: self.app.action_quit_app(),
+        }
+        if key in dispatch:
+            dispatch[key]()
+
+    def action_quit_app(self) -> None:
+        save_data(self.app.data)
+        self.app.exit()
+
+
+# ─────────────────────────────────────────────
+#  Manage Players
+# ─────────────────────────────────────────────
+
+class ManagePlayersScreen(Screen):
+    BINDINGS = [Binding("escape", "pop_screen", "Back")]
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with VerticalScroll():
+            yield Label("👤  Manage Players", classes="screen-title")
+            yield Static("", id="player-status", classes="status-bar")
+            with Vertical(classes="card"):
+                yield Label("Current Players:", classes="field-label")
+                yield ListView(id="player-list")
+            with Vertical(classes="card"):
+                yield Label("Player Name", classes="field-label")
+                yield Input(placeholder="e.g. Alice", id="player-name-input")
+                with Horizontal(classes="btn-row"):
+                    yield Button("➕ Add", id="add-player-btn", classes="primary-btn")
+                    yield Button("🗑 Remove Selected", id="remove-player-btn", classes="danger-btn")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self._refresh_list()
+
+    def _refresh_list(self) -> None:
+        lv = self.query_one("#player-list", ListView)
+        lv.clear()
+        for p in self.app.data["players"]:
+            lv.append(ListItem(Label(p), id=f"player-{p}"))
+
+    def _set_status(self, msg: str, error: bool = False) -> None:
+        bar = self.query_one("#player-status", Static)
+        bar.update(msg)
+        bar.remove_class("status-bar", "error-bar")
+        bar.add_class("error-bar" if error else "status-bar")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "add-player-btn":
+            inp = self.query_one("#player-name-input", Input)
+            name = inp.value.strip()
+            if not name:
+                self._set_status("Please enter a name.", error=True)
+            elif name in self.app.data["players"]:
+                self._set_status(f"'{name}' already exists.", error=True)
+            else:
+                self.app.data["players"].append(name)
+                save_data(self.app.data)
+                inp.value = ""
+                self._refresh_list()
+                self._set_status(f"✅  Player '{name}' added.")
+        elif event.button.id == "remove-player-btn":
+            lv = self.query_one("#player-list", ListView)
+            if lv.highlighted_child is None:
+                self._set_status("Select a player first.", error=True)
+                return
+            item_id = lv.highlighted_child.id or ""
+            name = item_id.replace("player-", "", 1)
+            def _confirm(ok):
+                if ok:
+                    self.app.data["players"].remove(name)
+                    save_data(self.app.data)
+                    self._refresh_list()
+                    self._set_status(f"🗑  Player '{name}' removed.")
+            self.app.push_screen(ConfirmModal(f"Remove player '{name}'?"), _confirm)
+
+    def action_pop_screen(self) -> None:
+        self.app.pop_screen()
+
+
+# ─────────────────────────────────────────────
+#  Manage Races
+# ─────────────────────────────────────────────
+
+class ManageRacesScreen(Screen):
+    BINDINGS = [Binding("escape", "pop_screen", "Back")]
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with VerticalScroll():
+            yield Label("🏁  Manage Races", classes="screen-title")
+            yield Static("", id="race-status", classes="status-bar")
+            with Vertical(classes="card"):
+                yield Label("Current Races:", classes="field-label")
+                yield ListView(id="race-list")
+            with Vertical(classes="card"):
+                yield Label("Race Name (e.g. Bahrain Grand Prix)", classes="field-label")
+                yield Input(placeholder="Race name", id="race-name-input")
+                yield Label("Date (YYYY-MM-DD, optional)", classes="field-label")
+                yield Input(placeholder="2025-03-02", id="race-date-input")
+                with Horizontal(classes="btn-row"):
+                    yield Button("➕ Add Race", id="add-race-btn", classes="primary-btn")
+                    yield Button("🗑 Remove Selected", id="remove-race-btn", classes="danger-btn")
+                    if HAS_FASTF1:
+                        yield Button("📅 Auto-populate Schedule", id="auto-populate-btn")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self._refresh_list()
+
+    def _refresh_list(self) -> None:
+        lv = self.query_one("#race-list", ListView)
+        lv.clear()
+        for r in self.app.data["races"]:
+            date = r.get("date") or "No date"
+            has_results = "✅" if r.get("actual_results") else "⏳"
+            lv.append(ListItem(
+                Label(f"{has_results} {r['name']}  [{date}]"),
+                id=f"race-{r['name']}"
+            ))
+
+    def _set_status(self, msg: str, error: bool = False) -> None:
+        bar = self.query_one("#race-status", Static)
+        bar.update(msg)
+        bar.remove_class("status-bar", "error-bar")
+        bar.add_class("error-bar" if error else "status-bar")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "add-race-btn":
+            name = self.query_one("#race-name-input", Input).value.strip()
+            date = self.query_one("#race-date-input", Input).value.strip()
+            if not name:
+                self._set_status("Enter a race name.", error=True)
+                return
+            if any(r['name'].lower() == name.lower() for r in self.app.data["races"]):
+                self._set_status(f"'{name}' already exists.", error=True)
+                return
+            self.app.data["races"].append({
+                "name": name, "date": date,
+                "actual_results": [], "predictions": {}
+            })
+            save_data(self.app.data)
+            self.query_one("#race-name-input", Input).value = ""
+            self.query_one("#race-date-input", Input).value = ""
+            self._refresh_list()
+            self._set_status(f"✅  Race '{name}' added.")
+        elif event.button.id == "remove-race-btn":
+            lv = self.query_one("#race-list", ListView)
+            if lv.highlighted_child is None:
+                self._set_status("Select a race first.", error=True)
+                return
+            item_id = lv.highlighted_child.id or ""
+            name = item_id.replace("race-", "", 1)
+            def _confirm(ok):
+                if ok:
+                    self.app.data["races"] = [r for r in self.app.data["races"] if r['name'] != name]
+                    save_data(self.app.data)
+                    self._refresh_list()
+                    self._set_status(f"🗑  Race '{name}' removed.")
+            self.app.push_screen(ConfirmModal(f"Remove race '{name}'?"), _confirm)
+        elif event.button.id == "auto-populate-btn":
+            self._auto_populate()
+
+    @work(thread=True)
+    def _auto_populate(self) -> None:
+        self.app.call_from_thread(self._set_status, "⏳ Fetching F1 schedule…")
+        year = datetime.datetime.now().year
+        try:
+            cache_dir = os.path.abspath('fastf1_cache')
+            os.makedirs(cache_dir, exist_ok=True)
+            fastf1.Cache.enable_cache(cache_dir)
+            schedule = fastf1.get_event_schedule(year)
+            races = schedule[schedule['EventFormat'] != 'testing']
+            added_count = 0
+            for _, row in races.iterrows():
+                race_name = row.get('EventName')
+                event_date = row.get('EventDate')
+                date_str = str(event_date.date()) if hasattr(event_date, 'date') else ""
+                existing_race = next((r for r in self.app.data["races"] if r['name'].lower() == race_name.lower()), None)
+                if existing_race:
+                    if not existing_race.get('date') and date_str:
+                        existing_race['date'] = date_str
+                        added_count += 1
+                elif race_name:
+                    self.app.data["races"].append({
+                        "name": race_name, "date": date_str,
+                        "actual_results": [], "predictions": {}
+                    })
+                    added_count += 1
+            if added_count > 0:
+                save_data(self.app.data)
+            self.app.call_from_thread(self._refresh_list)
+            msg = f"✅  {added_count} race(s) updated." if added_count else "Schedule already up to date."
+            self.app.call_from_thread(self._set_status, msg)
+        except Exception as e:
+            self.app.call_from_thread(self._set_status, f"Error: {e}", True)
+
+    def action_pop_screen(self) -> None:
+        self.app.pop_screen()
+
+
+# ─────────────────────────────────────────────
+#  Enter Predictions
+# ─────────────────────────────────────────────
+
+class EnterPredictionsScreen(Screen):
+    BINDINGS = [Binding("escape", "pop_screen", "Back")]
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._selected_race = None
+        self._selected_player = None
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with VerticalScroll():
+            yield Label("🔮  Enter Predictions", classes="screen-title")
+            yield Static("", id="pred-status", classes="status-bar")
+
+            with Vertical(classes="card"):
+                yield Label("Select Race:", classes="field-label")
+                yield ListView(id="race-picker")
+
+            with Vertical(classes="card"):
+                yield Label("Select Player:", classes="field-label")
+                yield ListView(id="player-picker")
+
+            with Vertical(classes="card"):
+                yield Label("Paste or type Top 10 drivers (one per line):", classes="field-label")
+                yield TextArea(id="paste-area")
+                with Horizontal(classes="btn-row"):
+                    yield Button("💾 Save Prediction", id="save-pred-btn", classes="primary-btn")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        today = datetime.datetime.now().date().isoformat()
+        upcoming = [
+            r for r in self.app.data["races"]
+            if not r.get("actual_results") and (not r.get("date") or r["date"] >= today)
+        ]
+        upcoming.sort(key=lambda x: x.get("date", "9999-12-31"))
+
+        race_lv = self.query_one("#race-picker", ListView)
+        for r in upcoming:
+            tag = " [NEXT]" if r == upcoming[0] else ""
+            date = r.get("date") or "?"
+            race_lv.append(ListItem(Label(f"🏁 {r['name']}  ({date}){tag}"), id=f"pr-{r['name']}"))
+
+        player_lv = self.query_one("#player-picker", ListView)
+        for p in self.app.data["players"]:
+            player_lv.append(ListItem(Label(f"👤 {p}"), id=f"pp-{p}"))
+
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        if event.list_view.id == "race-picker" and event.item:
+            name = (event.item.id or "").replace("pr-", "", 1)
+            self._selected_race = next((r for r in self.app.data["races"] if r['name'] == name), None)
+        elif event.list_view.id == "player-picker" and event.item:
+            self._selected_player = (event.item.id or "").replace("pp-", "", 1)
+
+    def _set_status(self, msg: str, error: bool = False) -> None:
+        bar = self.query_one("#pred-status", Static)
+        bar.update(msg)
+        bar.remove_class("status-bar", "error-bar")
+        bar.add_class("error-bar" if error else "status-bar")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id != "save-pred-btn":
+            return
+        if not self._selected_race:
+            self._set_status("Select a race first.", error=True)
+            return
+        if not self._selected_player:
+            self._set_status("Select a player first.", error=True)
+            return
+        raw = self.query_one("#paste-area", TextArea).text
+        parsed = parse_raw_input_lines(raw.splitlines(), 10)
+        if not parsed:
+            self._set_status("Enter at least one driver name.", error=True)
+            return
+
+        race = self._selected_race
+        player = self._selected_player
+
+        def _do_save():
+            race["predictions"][player] = parsed
+            save_data(self.app.data)
+            self._set_status(f"✅  Saved {len(parsed)} predictions for {player} at {race['name']}.")
+            self.query_one("#paste-area", TextArea).clear()
+
+        if player in race.get("predictions", {}):
+            def _confirm(ok):
+                if ok:
+                    _do_save()
+            self.app.push_screen(
+                ConfirmModal(f"Overwrite existing prediction for {player}?"), _confirm
+            )
+        else:
+            _do_save()
+
+    def action_pop_screen(self) -> None:
+        self.app.pop_screen()
+
+
+# ─────────────────────────────────────────────
+#  Enter Results
+# ─────────────────────────────────────────────
+
+class EnterResultsScreen(Screen):
+    BINDINGS = [Binding("escape", "pop_screen", "Back")]
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._selected_race = None
+        self._loading = False
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with VerticalScroll():
+            yield Label("📋  Enter Actual Race Results", classes="screen-title")
+            yield Static("", id="result-status", classes="status-bar")
+
+            with Vertical(classes="card"):
+                yield Label("Select a Completed Race:", classes="field-label")
+                yield ListView(id="result-race-picker")
+
+            with Vertical(classes="card"):
+                yield Label("Year (for API fetch):", classes="field-label")
+                year_val = str(datetime.datetime.now().year)
+                yield Input(value=year_val, placeholder="2025", id="year-input")
+                with Horizontal(classes="btn-row"):
+                    yield Button("🌐 Fetch from F1 APIs", id="fetch-btn")
+                    yield Button("✏️  Manual Entry", id="manual-btn")
+
+            with Vertical(classes="card", id="manual-card"):
+                yield Label("Paste or type Top 10 results (one per line):", classes="field-label")
+                yield TextArea(id="results-area")
+                with Horizontal(classes="btn-row"):
+                    yield Button("💾 Save Results", id="save-results-btn", classes="primary-btn")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        today = datetime.datetime.now().date().isoformat()
+        past = [r for r in self.app.data["races"] if r.get("date") and r["date"] <= today]
+        past.sort(key=lambda x: x.get("date", "0000-00-00"))
+        lv = self.query_one("#result-race-picker", ListView)
+        for r in past:
+            tag = "✅ " if r.get("actual_results") else "⏳ "
+            lv.append(ListItem(Label(f"{tag}{r['name']}  ({r.get('date','?')})"), id=f"rr-{r['name']}"))
+        # Hide manual card initially
+        self.query_one("#manual-card").display = False
+
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        if event.list_view.id == "result-race-picker" and event.item:
+            name = (event.item.id or "").replace("rr-", "", 1)
+            self._selected_race = next((r for r in self.app.data["races"] if r['name'] == name), None)
+
+    def _set_status(self, msg: str, error: bool = False) -> None:
+        bar = self.query_one("#result-status", Static)
+        bar.update(msg)
+        bar.remove_class("status-bar", "error-bar")
+        bar.add_class("error-bar" if error else "status-bar")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "manual-btn":
+            self.query_one("#manual-card").display = True
+            self._set_status("Enter results manually below.")
+        elif event.button.id == "fetch-btn":
+            if not self._selected_race:
+                self._set_status("Select a race first.", error=True)
+                return
+            year_str = self.query_one("#year-input", Input).value.strip()
+            try:
+                year = int(year_str)
+            except ValueError:
+                self._set_status("Invalid year.", error=True)
+                return
+            self._fetch_results(year)
+        elif event.button.id == "save-results-btn":
+            if not self._selected_race:
+                self._set_status("Select a race first.", error=True)
+                return
+            raw = self.query_one("#results-area", TextArea).text
+            parsed = parse_raw_input_lines(raw.splitlines(), 10)
+            if not parsed:
+                self._set_status("Enter at least one result.", error=True)
+                return
+            def _do_save():
+                self._selected_race["actual_results"] = parsed
+                save_data(self.app.data)
+                self._set_status(f"✅  Results saved for {self._selected_race['name']}.")
+            race = self._selected_race
+            if race.get("actual_results"):
+                self.app.push_screen(
+                    ConfirmModal(f"Overwrite existing results for {race['name']}?"),
+                    lambda ok: _do_save() if ok else None
+                )
+            else:
+                _do_save()
+
+    @work(thread=True)
+    def _fetch_results(self, year: int) -> None:
+        race = self._selected_race
+        self.app.call_from_thread(self._set_status, f"⏳ Fetching results for {race['name']} ({year})…")
+        fetched = fetch_fastf1_results(year, race['name']) if HAS_FASTF1 else None
+        if not fetched:
+            fetched = fetch_openf1_results(year, race['name'])
+        if not fetched:
+            self.app.call_from_thread(self._set_status, "Could not fetch results. Try manual entry.", error=True)
+            def _show_manual():
+                self.query_one("#manual-card").display = True
+            self.app.call_from_thread(_show_manual)
+            return
+        preview = "\n".join(
+            f"{i+1}. {d.get('BroadcastName', str(d))}" for i, d in enumerate(fetched)
+        )
+        def _show_confirm():
+            def _confirm(ok):
+                if ok:
+                    race["actual_results"] = fetched
+                    save_data(self.app.data)
+                    self._set_status(f"✅  Results saved for {race['name']}.")
+            self.app.push_screen(
+                ConfirmModal(f"Save these results?\n\n{preview}"), _confirm
+            )
+        self.app.call_from_thread(_show_confirm)
+
+    def action_pop_screen(self) -> None:
+        self.app.pop_screen()
+
+
+# ─────────────────────────────────────────────
+#  View Race Points
+# ─────────────────────────────────────────────
+
+class ViewRacePointsScreen(Screen):
+    BINDINGS = [Binding("escape", "pop_screen", "Back")]
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._selected_race = None
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with Vertical():
+            yield Label("📊  View Race Points", classes="screen-title")
+            with Horizontal():
+                with Vertical(id="race-selector-panel"):
+                    yield Label("Select Race:", classes="field-label")
+                    yield ListView(id="points-race-picker")
+                with VerticalScroll(id="points-detail-panel"):
+                    yield Static("← Select a race to view points", id="points-content")
+        yield Footer()
+
+    CSS = """
+    ViewRacePointsScreen > Vertical {
+        height: 100%;
+    }
+    ViewRacePointsScreen Horizontal {
+        height: 1fr;
+    }
+    #race-selector-panel {
+        width: 40;
+        border-right: solid $accent;
+        padding: 0 1;
+    }
+    #race-selector-panel ListView {
+        height: 1fr;
+    }
+    #points-detail-panel {
+        width: 1fr;
+        padding: 1 2;
+    }
+    """
+
+    def on_mount(self) -> None:
+        today = datetime.datetime.now().date().isoformat()
+        sorted_races = sorted(self.app.data["races"], key=lambda x: x.get("date", "9999-12-31"))
+        lv = self.query_one("#points-race-picker", ListView)
+        for r in sorted_races:
+            has = "✅" if r.get("actual_results") else "⏳"
+            lv.append(ListItem(Label(f"{has} {r['name']}"), id=f"vr-{r['name']}"))
+
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        if event.list_view.id == "points-race-picker" and event.item:
+            name = (event.item.id or "").replace("vr-", "", 1)
+            race = next((r for r in self.app.data["races"] if r['name'] == name), None)
+            if race:
+                self._selected_race = race
+                self._render_points(race)
+
+    def _render_points(self, race: dict) -> None:
+        content_widget = self.query_one("#points-content", Static)
+        actual = race.get("actual_results", [])
+
+        if not actual:
+            content_widget.update(f"[yellow]No results yet for {race['name']}.[/]")
+            return
+
+        lines = [f"[bold white]{race['name']}[/]\n"]
+
+        # Summary scores
+        lines.append("[bold cyan]Scores  (lower = better)[/]")
+        if not race.get("predictions"):
+            lines.append("  [dim]No predictions made.[/]")
+        else:
+            scores = []
+            for player, pred in race["predictions"].items():
+                pts = calculate_player_points_for_race(pred, actual)
+                scores.append((player, pts))
+            scores.sort(key=lambda x: x[1])
+            for i, (player, pts) in enumerate(scores):
+                icon = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "  "
+                lines.append(f"  {icon} [bold]{player}[/]: [green]{pts}[/] pts")
+
+        # Breakdown
+        lines.append("\n[bold cyan]Detailed Breakdown[/]")
+        for player, pred in race.get("predictions", {}).items():
+            lines.append(f"\n[bold yellow]{player}[/]")
+            for i in range(10):
+                p = pred[i] if i < len(pred) else "(none)"
+                if i < len(actual):
+                    act_val = actual[i]
+                    act = act_val.get("BroadcastName", str(act_val)) if isinstance(act_val, dict) else str(act_val)
+                else:
+                    act = "(none)"
+                correct = calculate_str_equality(p, actual[i] if i < len(actual) else "(none)")
+                if correct:
+                    lines.append(f"  [green]P{i+1}: {act} ✓[/]")
+                else:
+                    lines.append(f"  [red]P{i+1}: predicted [bold]{p}[/], actual [bold]{act}[/] +1[/]")
+
+        content_widget.update("\n".join(lines))
+
+    def action_pop_screen(self) -> None:
+        self.app.pop_screen()
+
+
+# ─────────────────────────────────────────────
+#  Season Standings
+# ─────────────────────────────────────────────
+
+class StandingsScreen(Screen):
+    BINDINGS = [Binding("escape", "pop_screen", "Back")]
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with VerticalScroll():
+            yield Label("🏆  Season Standings", classes="screen-title")
+            yield Label("Lower points = better!", classes="subtitle")
+            yield DataTable(id="standings-table")
+            yield Static("", id="standings-note", classes="subtitle")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        table = self.query_one("#standings-table", DataTable)
+        table.add_columns("Pos", "Player", "Points", "Races With Pred")
+
+        data = self.app.data
+        player_scores = {p: 0 for p in data["players"]}
+        player_races = {p: 0 for p in data["players"]}
+        races_counted = 0
+
+        for race in data["races"]:
+            actual = race.get("actual_results")
+            if actual:
+                races_counted += 1
+                for player, prediction in race["predictions"].items():
+                    if player in player_scores:
+                        pts = calculate_player_points_for_race(prediction, actual)
+                        player_scores[player] += pts
+                        player_races[player] += 1
+                for player in data["players"]:
+                    if player not in race["predictions"]:
+                        player_scores[player] += 10  # Penalty
+
+        sorted_players = sorted(player_scores.items(), key=lambda x: x[1])
+
+        medals = ["🥇", "🥈", "🥉"]
+        for i, (player, score) in enumerate(sorted_players):
+            pos = medals[i] if i < 3 else str(i + 1)
+            style = "bold green" if i == 0 else ""
+            table.add_row(pos, player, str(score), str(player_races.get(player, 0)), key=player)
+
+        note = self.query_one("#standings-note", Static)
+        note.update(f"📈 {races_counted} race(s) with results counted.  Missing prediction = +10 pts penalty.")
+
+    def action_pop_screen(self) -> None:
+        self.app.pop_screen()
+
+
+# ─────────────────────────────────────────────
+#  Auto-update loading screen (startup)
+# ─────────────────────────────────────────────
+
+class AutoUpdateScreen(Screen):
+    """Shows briefly while checking past races for missing results."""
+
+    def compose(self) -> ComposeResult:
+        with Center():
+            yield LoadingIndicator()
+            yield Label("⏳  Checking for missing race results…", classes="screen-title")
+
+    def on_mount(self) -> None:
+        self._do_update()
+
+    @work(thread=True)
+    def _do_update(self) -> None:
+        data = self.app.data
+        today = datetime.datetime.now().date().isoformat()
+        updated = False
+        for race in data["races"]:
+            r_date = race.get("date")
+            if r_date and r_date <= today and not race["actual_results"]:
+                year = int(r_date[:4])
+                fetched = fetch_fastf1_results(year, race['name']) if HAS_FASTF1 else None
+                if not fetched:
+                    fetched = fetch_openf1_results(year, race['name'])
+                if fetched:
+                    race["actual_results"] = fetched
+                    updated = True
+        if updated:
+            save_data(data)
+        self.app.call_from_thread(self._go_to_menu)
+
+    def _go_to_menu(self) -> None:
+        self.app.switch_screen(MainMenuScreen())
+
+
+# ─────────────────────────────────────────────
+#  App entry point
+# ─────────────────────────────────────────────
+
+class PointsAreBadApp(App):
+    CSS = CSS
+    TITLE = TITLE
+    SUB_TITLE = SUBTITLE
+    BINDINGS = [Binding("q", "quit_app", "Quit", show=True)]
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.data = load_data()
+
+    def on_mount(self) -> None:
+        self.push_screen(AutoUpdateScreen())
+
+    def action_quit_app(self) -> None:
+        save_data(self.data)
+        self.exit()
+
+
+def main_menu():
+    app = PointsAreBadApp()
+    app.run()
+
 
 if __name__ == "__main__":
     try:
         main_menu()
     except KeyboardInterrupt:
-        print("\nExiting...")
         sys.exit(0)
