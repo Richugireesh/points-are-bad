@@ -199,6 +199,12 @@ def auto_update_past_races(data: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def main_menu() -> None:
+    from .tui import run as tui_run
+    tui_run()
+
+
+def _cli_main() -> None:
+    """Legacy CLI entry point (plain terminal, no TUI)."""
     data = load_data()
     auto_update_past_races(data)
 
