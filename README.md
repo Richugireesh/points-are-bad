@@ -1,25 +1,69 @@
 # Points Are Bad - F1 Prediction Game
 
-A Python-based CLI application to play "Points are Bad" - a Formula 1 prediction game among friends where players predict the Top 10 finishers of every Grand Prix. The objective is to accumulate the *least* amount of points across the season.
+A Python CLI for playing "Points are Bad" — a Formula 1 prediction game among friends where players predict the Top 10 finishers of every Grand Prix. The objective is to accumulate the *least* amount of points across the season.
 
 ## Rules
+
 - Players predict the Top 10 finishers before every GP (usually after qualifying).
-- For every position a prediction is wrong, the player gets points. (e.g., if you predicted a driver P4 and they finished P1, that's not right, so you get a penalty point for that slot not matching). The current logic gives +1 point for every incorrect prediction slot. A missing prediction gives a flat +10 penalty points for that race.
+- Each incorrect prediction slot scores **+1 point**.
+- A missing prediction for a race scores a flat **+10 point penalty**.
 - The player with the fewest points at the end of the season wins.
 
-## Features
-- **Player Management**: Add or remove players from the game.
-- **Race Management**: Automatically fetches the 24-race schedule for the current year from **FastF1**.
-- **Prediction Entry**: CLI interface to quickly add Top 10 predictions for any player.
-- **Automated Results Fetching**:
-  1. Attempts to use the **FastF1** API to fetch official race classification.
-  2. If the fastf1 / Ergast official results are not yet published, instantly falls back to the **OpenF1** API to fetch real-time session results.
-  3. If both APIs are down, drops back to user manual entry.
-- **Points Calculation & Standings**: Auto-calculates the points gap for every prediction slot and prints season standings based on the `points_are_bad_data.json` local storage.
+## Installation
 
-## Usage
-Activate your virtual environment and run the CLI script:
+Requires Python 3.9+ and [uv](https://github.com/astral-sh/uv).
+
+```bash
+git clone <repo>
+cd points-are-bad
+uv venv
+uv pip install -e .[dev]   # omit [dev] to skip pytest
+```
+
+## Running
+
 ```bash
 source .venv/bin/activate
-python points_are_bad.py
+points-are-bad
+```
+
+Or without activating the virtual environment:
+
+```bash
+.venv/bin/points-are-bad
+```
+
+Data is stored in `points_are_bad_data.json` in the working directory (auto-created on first run).
+
+## Testing
+
+```bash
+source .venv/bin/activate
+pytest tests/ -v
+```
+
+## Features
+
+- **Player Management**: Add or remove players from the game.
+- **Race Schedule**: Fetches the current-season schedule from FastF1 and syncs it to local data.
+- **Driver-Select UI**: Interactive picker grouped by team — scroll through the 2026 grid (22 drivers, 11 teams) and select your Top 10. Includes a confirmation screen before saving.
+- **Automated Results Fetching**:
+  1. Attempts **FastF1** for official race classification.
+  2. Falls back to **OpenF1** if FastF1 results are not yet published.
+  3. Falls back to manual entry if both APIs are unavailable.
+- **Points Breakdown**: Per-position scoring breakdown for any race, showing all players.
+- **Season Standings**: Live standings table based on `points_are_bad_data.json`.
+
+## Package Structure
+
+```
+src/points_are_bad/
+    cli.py        # menus, UI, all user interaction
+    scoring.py    # points calculation and alias resolution
+    api.py        # FastF1 + OpenF1 data fetching
+    storage.py    # load/save points_are_bad_data.json
+    drivers.py    # 2026 F1 roster (22 drivers, 11 teams)
+tests/
+    test_scoring.py
+    test_storage.py
 ```
