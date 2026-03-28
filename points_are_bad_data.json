@@ -9,116 +9,187 @@
             "name": "Australian Grand Prix",
             "actual_results": [
                 {
-                    "BroadcastName": "G RUSSELL",
-                    "FirstName": "George",
-                    "LastName": "Russell",
-                    "Abbreviation": "RUS"
+                    "abbr": "RUS",
+                    "name": "George Russell"
                 },
                 {
-                    "BroadcastName": "K ANTONELLI",
-                    "FirstName": "Kimi",
-                    "LastName": "Antonelli",
-                    "Abbreviation": "ANT"
+                    "abbr": "ANT",
+                    "name": "Kimi Antonelli"
                 },
                 {
-                    "BroadcastName": "C LECLERC",
-                    "FirstName": "Charles",
-                    "LastName": "Leclerc",
-                    "Abbreviation": "LEC"
+                    "abbr": "LEC",
+                    "name": "Charles Leclerc"
                 },
                 {
-                    "BroadcastName": "L HAMILTON",
-                    "FirstName": "Lewis",
-                    "LastName": "Hamilton",
-                    "Abbreviation": "HAM"
+                    "abbr": "HAM",
+                    "name": "Lewis Hamilton"
                 },
                 {
-                    "BroadcastName": "L NORRIS",
-                    "FirstName": "Lando",
-                    "LastName": "Norris",
-                    "Abbreviation": "NOR"
+                    "abbr": "NOR",
+                    "name": "Lando Norris"
                 },
                 {
-                    "BroadcastName": "M VERSTAPPEN",
-                    "FirstName": "Max",
-                    "LastName": "Verstappen",
-                    "Abbreviation": "VER"
+                    "abbr": "VER",
+                    "name": "Max Verstappen"
                 },
                 {
-                    "BroadcastName": "O BEARMAN",
-                    "FirstName": "Oliver",
-                    "LastName": "Bearman",
-                    "Abbreviation": "BEA"
+                    "abbr": "BEA",
+                    "name": "Oliver Bearman"
                 },
                 {
-                    "BroadcastName": "A LINDBLAD",
-                    "FirstName": "Arvid",
-                    "LastName": "Lindblad",
-                    "Abbreviation": "LIN"
+                    "abbr": "LIN",
+                    "name": "Arvid Lindblad"
                 },
                 {
-                    "BroadcastName": "G BORTOLETO",
-                    "FirstName": "Gabriel",
-                    "LastName": "Bortoleto",
-                    "Abbreviation": "BOR"
+                    "abbr": "BOR",
+                    "name": "Gabriel Bortoleto"
                 },
                 {
-                    "BroadcastName": "P GASLY",
-                    "FirstName": "Pierre",
-                    "LastName": "Gasly",
-                    "Abbreviation": "GAS"
+                    "abbr": "GAS",
+                    "name": "Pierre Gasly"
                 }
             ],
             "predictions": {
                 "richu": [
-                    "Rus",
-                    "\u2060kimi",
-                    "\u2060lec",
-                    "\u2060pia",
-                    "\u2060ver",
-                    "\u2060hadjar",
-                    "\u2060ham",
-                    "\u2060nor",
-                    "\u2060linblad",
-                    "Gabby"
+                    "russell",
+                    "antonelli",
+                    "leclerc",
+                    "piastri",
+                    "verstappen",
+                    "hadjar",
+                    "hamilton",
+                    "norris",
+                    "lindblad",
+                    "bortoleto"
                 ],
                 "sam": [
-                    "Rus",
-                    "Lec",
-                    "Pia",
-                    "hadj",
-                    "Hamilton",
-                    "kimi",
-                    "Nor",
-                    "max",
-                    "Lind",
-                    "Bor"
+                    "russell",
+                    "leclerc",
+                    "piastri",
+                    "hadjar",
+                    "hamilton",
+                    "antonelli",
+                    "norris",
+                    "verstappen",
+                    "lindblad",
+                    "bortoleto"
                 ],
                 "danny": [
-                    "Pia",
-                    "Rus",
-                    "Hadj",
-                    "Lec",
-                    "Max",
-                    "kimi",
-                    "Norris",
-                    "Hamilton",
-                    "Alonso",
-                    "Perez"
+                    "piastri",
+                    "russell",
+                    "hadjar",
+                    "leclerc",
+                    "verstappen",
+                    "antonelli",
+                    "norris",
+                    "hamilton",
+                    "alonso",
+                    "perez"
                 ]
             },
             "date": "2026-03-08"
         },
         {
             "name": "Chinese Grand Prix",
-            "actual_results": [],
-            "predictions": {},
+            "actual_results": [
+                {
+                    "abbr": "ANT",
+                    "name": "Kimi Antonelli"
+                },
+                {
+                    "abbr": "RUS",
+                    "name": "George Russell"
+                },
+                {
+                    "abbr": "HAM",
+                    "name": "Lewis Hamilton"
+                },
+                {
+                    "abbr": "LEC",
+                    "name": "Charles Leclerc"
+                },
+                {
+                    "abbr": "BEA",
+                    "name": "Oliver Bearman"
+                },
+                {
+                    "abbr": "GAS",
+                    "name": "Pierre Gasly"
+                },
+                {
+                    "abbr": "LAW",
+                    "name": "Liam Lawson"
+                },
+                {
+                    "abbr": "HAD",
+                    "name": "Isack Hadjar"
+                },
+                {
+                    "abbr": "SAI",
+                    "name": "Carlos Sainz"
+                },
+                {
+                    "abbr": "COL",
+                    "name": "Franco Colapinto"
+                }
+            ],
+            "predictions": {
+                "richu": [
+                    "russell",
+                    "antonelli",
+                    "leclerc",
+                    "hamilton",
+                    "norris",
+                    "piastri",
+                    "verstappen",
+                    "gasly",
+                    "bearman",
+                    "lawson"
+                ],
+                "danny": [
+                    "russell",
+                    "leclerc",
+                    "antonelli",
+                    "hamilton",
+                    "verstappen",
+                    "norris",
+                    "piastri",
+                    "hadjar",
+                    "bearman",
+                    "gasly"
+                ],
+                "sam": [
+                    "russell",
+                    "hamilton",
+                    "antonelli",
+                    "leclerc",
+                    "piastri",
+                    "verstappen",
+                    "hadjar",
+                    "bearman",
+                    "gasly",
+                    "lawson"
+                ]
+            },
             "date": "2026-03-15"
         },
         {
             "name": "Japanese Grand Prix",
             "actual_results": [],
-            "predictions": {},
+            "predictions": {
+                "richu": [
+                    "antonelli",
+                    "russell",
+                    "leclerc",
+                    "hamilton",
+                    "piastri",
+                    "verstappen",
+                    "norris",
+                    "lindblad",
+                    "bortoleto",
+                    "gasly"
+                ]
+            },
             "date": "2026-03-29"
         },
         {

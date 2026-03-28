@@ -1,699 +1,746 @@
-import json
-import os
-import sys
+"""CLI presentation layer.
+
+Responsible for: menus, input loops, print/input calls, and orchestrating
+calls to api, scoring, and storage modules.  No scoring math or HTTP
+requests live here.
+"""
+
+from __future__ import annotations
+
 import datetime
-import logging
+import os
 import re
+import sys
 
-try:
-    import fastf1
-    HAS_FASTF1 = True
-    logging.getLogger('fastf1.req').setLevel(logging.CRITICAL)
-except ImportError:
-    HAS_FASTF1 = False
+from .api import HAS_FASTF1, fetch_results, get_schedule_updates
+from .drivers import ROSTER
+from .scoring import (
+    calculate_player_points_for_race,
+    calculate_season_standings,
+    score_position,
+)
+from .storage import load_data, save_data
 
-import urllib.request
-import urllib.error
 
-DATA_FILE = "points_are_bad_data.json"
+# ---------------------------------------------------------------------------
+# Layout constants & helpers
+# ---------------------------------------------------------------------------
 
-def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
-    return {"players": [], "races": []}
+_W = 50  # usable content width inside the box
 
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
 
-def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
+def _box_top() -> str:
+    return f"╔{'═' * (_W + 2)}╗"
 
-def parse_raw_input_lines(lines, max_items):
+
+def _box_bot() -> str:
+    return f"╚{'═' * (_W + 2)}╝"
+
+
+def _box_row(text: str) -> str:
+    return f"║  {text:<{_W}}║"
+
+
+def _header(*lines: str) -> None:
+    """Print a consistent framed box header."""
+    print(_box_top())
+    for line in lines:
+        print(_box_row(line))
+    print(_box_bot())
+
+
+def _rule(label: str = "") -> None:
+    """Print a horizontal section divider with an optional inline label."""
+    if label:
+        dash_len = max(_W - len(label) - 1, 0)
+        print(f"  {label} {'─' * dash_len}")
+    else:
+        print(f"  {'─' * (_W + 2)}")
+
+
+def _fmt_date(date_str: str) -> str:
+    """'2026-03-16'  ->  'Mar 16'.  Returns 'Unknown' on bad input."""
+    if not date_str:
+        return "Unknown"
+    try:
+        return datetime.date.fromisoformat(date_str).strftime("%b %d")
+    except ValueError:
+        return date_str
+
+
+def _season_context(data: dict) -> str:
+    n = len(data["players"])
+    done = sum(1 for r in data["races"] if r.get("actual_results"))
+    total = len(data["races"])
+    year = datetime.datetime.now().year
+    word = "player" if n == 1 else "players"
+    return f"Season {year}  •  {n} {word}  •  {done}/{total} races done"
+
+
+# ---------------------------------------------------------------------------
+# Terminal helpers
+# ---------------------------------------------------------------------------
+
+def clear_screen() -> None:
+    os.system("cls" if os.name == "nt" else "clear")
+
+
+def parse_raw_input_lines(lines: list[str], max_items: int) -> list[str]:
+    """Parse a block of pasted or typed lines into a clean list of driver names."""
     text = "\n".join(lines)
-    # Remove hidden characters like Word Joiner or Zero Width Space
-    text = text.replace('\u2060', '').replace('\u200b', '')
-    # Replace common list numbering like "1.", "2)", "3 ." with a delimiter "|"
-    cleaned_text = re.sub(r'\d+\s*[.)]', '|', text)
-    
-    parts = []
-    # Split by the new delimiter, newlines, or commas
-    for chunk in re.split(r'[|\n,]', cleaned_text):
+    text = text.replace("\u2060", "").replace("\u200b", "")
+    cleaned = re.sub(r"\d+\s*[.)]", "|", text)
+
+    parts: list[str] = []
+    for chunk in re.split(r"[|\n,]", cleaned):
         chunk = chunk.strip()
-        # Clean up stray left over parenthesis if they typed "(1)"
-        if chunk.startswith('('):
+        if chunk.startswith("("):
             chunk = chunk[1:].strip()
         if chunk:
             parts.append(chunk)
-            
+
     return parts[:max_items]
 
-def get_input_list(prompt, min_items=10, max_items=10):
-    print(prompt)
-    print("(You can paste a list directly here, or type them one by one. Press Enter on an empty line to finish.)")
-    
-    lines = []
+
+def get_input_list(prompt: str, min_items: int = 10, max_items: int = 10) -> list[str]:
+    print(f"\n  {prompt}")
+    print(
+        "  (Paste a list directly, or type one per line."
+        " Empty line to finish.)"
+    )
+
+    lines: list[str] = []
     while True:
         try:
-            line = input(f"  {len(lines)+1}. " if len(lines) < max_items else "  ... ").strip()
+            label = f"  {len(lines)+1:>2}. " if len(lines) < max_items else "  ... "
+            line = input(label).strip()
         except EOFError:
             break
-            
+
         if not line:
-            if len(lines) == 0:
+            if not lines:
                 continue
             parsed = parse_raw_input_lines(lines, max_items)
             if len(parsed) >= min_items:
                 break
-                
-            confirm = input(f"You only entered {len(parsed)} items. Are you sure you're done? (y/n): ").strip().lower()
-            if confirm == 'y':
+            confirm = input(
+                f"\n  Only {len(parsed)} items entered."
+                " Done? (y/n): "
+            ).strip().lower()
+            if confirm == "y":
                 break
-            else:
-                continue
-                
+            continue
+
         lines.append(line)
         parsed = parse_raw_input_lines(lines, max_items)
         if len(parsed) >= max_items:
             break
-            
+
     return parse_raw_input_lines(lines, max_items)
 
-def select_item(items, item_name, display_func=str):
+
+def select_item(items: list, item_name: str, display_func=str):
+    """Print a numbered list and return the chosen item, or None on bad input."""
     if not items:
-        input(f"No {item_name}s exist. Please add a {item_name} first. Press Enter...")
-        return None
-        
-    print(f"\nAvailable {item_name}s:")
-    for i, item in enumerate(items):
-        print(f"{i+1}. {display_func(item)}")
-        
-    try:
-        idx = int(input(f"\nSelect a {item_name} by number: ")) - 1
-        if not (0 <= idx < len(items)):
-            raise ValueError()
-        return items[idx]
-    except ValueError:
-        input(f"Invalid {item_name} selection. Press Enter...")
+        input(f"\n  No {item_name}s exist. Add one first. Press Enter...")
         return None
 
-def auto_update_past_races(data):
+    print()
+    for i, item in enumerate(items):
+        print(f"  [{i+1}] {display_func(item)}")
+
+    try:
+        idx = int(input(f"\n  Select [1-{len(items)}]: ")) - 1
+        if not (0 <= idx < len(items)):
+            raise ValueError
+        return items[idx]
+    except ValueError:
+        input("  Invalid selection. Press Enter...")
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Auto-update on startup
+# ---------------------------------------------------------------------------
+
+def auto_update_past_races(data: dict) -> None:
     today = datetime.datetime.now().date().isoformat()
     updated = False
-    
-    # We'll need to briefly inform the user if we perform an update
     first_update = True
-    
+
     for race in data["races"]:
         r_date = race.get("date")
         if r_date and r_date <= today and not race["actual_results"]:
             if first_update:
                 clear_screen()
-                print("=== Performing Auto-Updates ===")
+                _header("Auto-updating past race results...")
+                print()
                 first_update = False
-                
-            print(f"Fetching missing results for completed race: {race['name']} ({r_date})...")
+
+            print(f"  Fetching: {race['name']} ({_fmt_date(r_date)}) ...")
             year = int(r_date[:4])
-            fetched = fetch_fastf1_results(year, race['name']) if HAS_FASTF1 else None
-            
-            if not fetched:
-                fetched = fetch_openf1_results(year, race['name'])
-                
+            fetched = fetch_results(year, race["name"])
+
             if fetched:
                 race["actual_results"] = fetched
                 updated = True
-                print(f" -> Successfully saved results for {race['name']}!\n")
+                print(f"  ✓  Results saved for {race['name']}\n")
             else:
-                print(f" -> Could not fetch results yet.\n")
-                
+                print("  -  Could not fetch results yet.\n")
+
     if updated:
         save_data(data)
     if not first_update:
-        input("Press Enter to continue to the Main Menu...")
+        input("  Press Enter to continue to the Main Menu...")
 
-def main_menu():
+
+# ---------------------------------------------------------------------------
+# Main menu
+# ---------------------------------------------------------------------------
+
+def main_menu() -> None:
     data = load_data()
     auto_update_past_races(data)
-    
+
     while True:
         clear_screen()
-        print("=== Points are Bad: F1 Prediction Game ===")
-        print("1. Manage Players")
-        print("2. Manage Races")
-        print("3. Enter Predictions")
-        print("4. Enter Actual Race Results")
-        print("5. View Race Results & Points")
-        print("6. View Season Standings")
-        print("7. Exit")
-        
-        choice = input("\nSelect an option: ").strip()
-        
-        if choice == '1':
-            manage_players(data)
-        elif choice == '2':
-            manage_races(data)
-        elif choice == '3':
+        _header("Points are Bad  •  F1 Prediction Game", _season_context(data))
+        print()
+        print("  Play")
+        print("    [1]  Enter Predictions")
+        print("    [2]  View Race Results & Points")
+        print("    [3]  View Season Standings")
+        print()
+        print("  Admin")
+        print("    [4]  Manage Players")
+        print("    [5]  Manage Races")
+        print("    [6]  Enter Race Results")
+        print()
+        print("    [7]  Exit")
+        print()
+
+        choice = input("  Select [1-7]: ").strip()
+
+        if choice == "1":
             enter_predictions(data)
-        elif choice == '4':
-            enter_results(data)
-        elif choice == '5':
+        elif choice == "2":
             view_race_points(data)
-        elif choice == '6':
+        elif choice == "3":
             view_standings(data)
-        elif choice == '7':
+        elif choice == "4":
+            manage_players(data)
+        elif choice == "5":
+            manage_races(data)
+        elif choice == "6":
+            enter_results(data)
+        elif choice == "7":
             save_data(data)
-            print("Scores saved! Exiting...")
+            print("\n  Scores saved! Goodbye.")
             sys.exit(0)
         else:
-            input("Invalid choice. Press Enter to try again.")
+            input("  Invalid choice. Press Enter to try again.")
 
-def manage_players(data):
+
+# ---------------------------------------------------------------------------
+# Player management
+# ---------------------------------------------------------------------------
+
+def manage_players(data: dict) -> None:
     while True:
         clear_screen()
-        print("--- Manage Players ---")
+        _header("Manage Players")
+        print()
+
         if not data["players"]:
-            print("No players added yet.")
+            print("  No players added yet.")
         else:
-            print("Current players:")
-            for p in data["players"]:
-                print(f" - {p}")
-        
-        print("\n1. Add Player")
-        print("2. Remove Player")
-        print("3. Back to Main Menu")
-        choice = input("Select an option: ").strip()
-        
-        if choice == '1':
-            name = input("Enter player name: ").strip()
+            joined = "  •  ".join(data["players"])
+            print(f"  Players ({len(data['players'])}):  {joined}")
+
+        print()
+        _rule()
+        print("  [1]  Add Player")
+        print("  [2]  Remove Player")
+        print()
+        print("  [3]  Back")
+        print()
+        choice = input("  Select [1-3]: ").strip()
+
+        if choice == "1":
+            name = input("\n  Player name: ").strip()
             if name and name not in data["players"]:
                 data["players"].append(name)
                 save_data(data)
-                print(f"Player '{name}' added!")
+                print(f"  ✓  '{name}' added.")
             elif name in data["players"]:
-                print("Player already exists.")
-            input("Press Enter to continue...")
-        elif choice == '2':
-            name = input("Enter player name to remove: ").strip()
+                print("  Player already exists.")
+            input("  Press Enter to continue...")
+        elif choice == "2":
+            name = input("\n  Name to remove: ").strip()
             if name in data["players"]:
                 data["players"].remove(name)
                 save_data(data)
-                print(f"Player '{name}' removed!")
+                print(f"  ✓  '{name}' removed.")
             else:
-                print("Player not found.")
-            input("Press Enter to continue...")
-        elif choice == '3':
+                print("  Player not found.")
+            input("  Press Enter to continue...")
+        elif choice == "3":
             break
 
-def manage_races(data):
+
+# ---------------------------------------------------------------------------
+# Race management
+# ---------------------------------------------------------------------------
+
+def manage_races(data: dict) -> None:
     while True:
         clear_screen()
-        print("--- Manage Races ---")
+        _header("Manage Races")
+        print()
+
         if not data["races"]:
-            print("No races added yet.")
+            print("  No races added yet.")
         else:
-            print("Current races:")
-            for r in data["races"]:
-                print(f" - {r['name']}")
-                
-        print("\n1. Add Race")
-        print("2. Remove Race")
-        print("3. Auto-populate Current Season Schedule (FastF1)")
-        print("4. Back to Main Menu")
-        choice = input("Select an option: ").strip()
-        
-        if choice == '1':
-            name = input("Enter race name (e.g. 'Bahrain GP'): ").strip()
-            # check if exists
-            if any(r['name'].lower() == name.lower() for r in data["races"]):
-                print("Race already exists.")
+            done = sum(1 for r in data["races"] if r.get("actual_results"))
+            print(
+                f"  {len(data['races'])} races scheduled"
+                f"  •  {done} with results"
+            )
+
+        print()
+        _rule()
+        print("  [1]  Add Race")
+        print("  [2]  Remove Race")
+        print("  [3]  Auto-populate Season Schedule (FastF1)")
+        print()
+        print("  [4]  Back")
+        print()
+        choice = input("  Select [1-4]: ").strip()
+
+        if choice == "1":
+            name = input("\n  Race name (e.g. 'Bahrain GP'): ").strip()
+            if any(r["name"].lower() == name.lower() for r in data["races"]):
+                print("  Race already exists.")
             elif name:
-                date_str = input("Enter race date (YYYY-MM-DD) or leave blank: ").strip()
-                data["races"].append({
-                    "name": name,
-                    "date": date_str,
-                    "actual_results": [],
-                    "predictions": {}
-                })
+                date_str = input("  Date (YYYY-MM-DD) or leave blank: ").strip()
+                data["races"].append(
+                    {
+                        "name": name,
+                        "date": date_str,
+                        "actual_results": [],
+                        "predictions": {},
+                    }
+                )
                 save_data(data)
-                print(f"Race '{name}' added!")
-            input("Press Enter to continue...")
-        elif choice == '2':
-            name = input("Enter race name to remove: ").strip()
+                print(f"  ✓  '{name}' added.")
+            input("  Press Enter to continue...")
+        elif choice == "2":
+            name = input("\n  Race name to remove: ").strip()
             found = False
             for r in data["races"]:
-                if r['name'].lower() == name.lower():
+                if r["name"].lower() == name.lower():
                     data["races"].remove(r)
                     save_data(data)
-                    print(f"Race '{r['name']}' removed!")
+                    print(f"  ✓  '{r['name']}' removed.")
                     found = True
                     break
             if not found:
-                print("Race not found.")
-            input("Press Enter to continue...")
-        elif choice == '3':
-            auto_populate_schedule(data)
-        elif choice == '4':
+                print("  Race not found.")
+            input("  Press Enter to continue...")
+        elif choice == "3":
+            _auto_populate_schedule(data)
+        elif choice == "4":
             break
 
-def auto_populate_schedule(data):
-    if not HAS_FASTF1:
-        input("\nFastF1 is not installed. Please install it to use this feature. Press Enter...")
-        return
-        
-    year = datetime.datetime.now().year
-    print(f"\nFetching official F1 schedule for {year}...")
-    try:
-        cache_dir = os.path.abspath('fastf1_cache')
-        os.makedirs(cache_dir, exist_ok=True)
-        fastf1.Cache.enable_cache(cache_dir)
-        
-        schedule = fastf1.get_event_schedule(year)
-        races = schedule[schedule['EventFormat'] != 'testing']
-        
-        added_count = 0
-        existing_names = [r['name'].lower() for r in data["races"]]
-        
-        for _, row in races.iterrows():
-            race_name = row.get('EventName')
-            event_date = row.get('EventDate')
-            date_str = str(event_date.date()) if hasattr(event_date, 'date') else ""
-            
-            existing_race = next((r for r in data["races"] if r['name'].lower() == race_name.lower()), None)
-            
-            if existing_race:
-                if not existing_race.get('date') and date_str:
-                    existing_race['date'] = date_str
-                    added_count += 1
-                    print(f" Updated Date: {race_name} -> {date_str}")
-            elif race_name:
-                data["races"].append({
-                    "name": race_name,
-                    "date": date_str,
-                    "actual_results": [],
-                    "predictions": {}
-                })
-                added_count += 1
-                print(f" Added: {race_name} ({date_str})")
-                
-        if added_count > 0:
-            save_data(data)
-            print(f"\nSuccessfully updated {added_count} races in the schedule!")
-        else:
-            print("\nSchedule is already up to date. No new races added.")
-            
-    except Exception as e:
-        print(f"Error fetching schedule: {e}")
-        
-    input("Press Enter to continue...")
 
-def enter_predictions(data):
-    clear_screen()
-    print("--- Enter Predictions ---")
-    
-    today = datetime.datetime.now().date().isoformat()
-    upcoming_races = [r for r in data["races"] if not r.get("actual_results") and (not r.get("date") or r["date"] >= today)]
-    upcoming_races.sort(key=lambda x: x.get("date", "9999-12-31"))
-    
-    if not upcoming_races:
-        input("No upcoming races to predict for. Press Enter...")
+def _auto_populate_schedule(data: dict) -> None:
+    """CLI wrapper: call api.get_schedule_updates, apply changes, save."""
+    if not HAS_FASTF1:
+        input(
+            "\n  FastF1 is not installed."
+            " Please install it to use this feature. Press Enter..."
+        )
         return
-        
-    def display_upcoming(r):
-        base = f"{r['name']} (Date: {r.get('date', 'Unknown')})"
-        if r == upcoming_races[0]:
-            return f"{base} [NEXT UPCOMING]"
-        return base
-        
-    race = select_item(upcoming_races, "upcoming race", display_upcoming)
+
+    year = datetime.datetime.now().year
+    print(f"\n  Fetching official F1 schedule for {year}...")
+    try:
+        new_races, date_updates = get_schedule_updates(data["races"])
+        change_count = 0
+
+        for race, new_date in date_updates:
+            race["date"] = new_date
+            change_count += 1
+            print(f"  Updated date: {race['name']}  →  {new_date}")
+
+        for race in new_races:
+            data["races"].append(race)
+            change_count += 1
+            print(f"  Added: {race['name']} ({race['date']})")
+
+        if change_count > 0:
+            save_data(data)
+            print(f"\n  ✓  {change_count} change(s) saved.")
+        else:
+            print("\n  Schedule is already up to date.")
+
+    except Exception as e:
+        print(f"  Error fetching schedule: {e}")
+
+    input("  Press Enter to continue...")
+
+
+# ---------------------------------------------------------------------------
+# Predictions
+# ---------------------------------------------------------------------------
+
+def _render_driver_list(roster: list[dict], picked: list[dict]) -> None:
+    """Print the numbered driver roster, marking already-picked drivers."""
+    current_team = ""
+    for i, d in enumerate(roster):
+        # Blank line between teams for visual grouping
+        if d["team"] != current_team:
+            if current_team:  # not the very first team
+                print()
+            current_team = d["team"]
+
+        pick_pos = next((j + 1 for j, p in enumerate(picked) if p is d), None)
+        if pick_pos:
+            tag = f"✓ P{pick_pos:<2}"
+            print(f"  [{i+1:>2}]  {d['abbr']}  {d['name']:<22}  {tag}")
+        else:
+            print(f"  [{i+1:>2}]  {d['abbr']}  {d['name']:<22}  {d['team']}")
+
+
+def _build_prediction(race_name: str, player: str) -> "list[str] | None":
+    """Interactive driver-select loop.  Returns the prediction as a list of
+    canonical driver keys, or None if the user cancels.
+    """
+    roster = ROSTER  # module-level list; can be narrowed in future
+    picked: list[dict] = []
+
+    while True:
+        # --- Selection loop: keep picking until 10 chosen or user exits ---
+        while len(picked) < 10:
+            pos = len(picked) + 1
+            clear_screen()
+            _header(
+                f"Prediction  –  {player}",
+                f"{race_name}  •  Choose P{pos} of 10",
+            )
+
+            # Already-picked summary
+            print()
+            _rule("Picked so far")
+            if not picked:
+                print("  (none yet)")
+            else:
+                for j, d in enumerate(picked):
+                    print(f"  P{j+1:>2}  {d['abbr']}  {d['name']}")
+
+            # Driver list
+            print()
+            _rule("Drivers")
+            _render_driver_list(roster, picked)
+
+            print()
+            print("  [0]  Done / finish with fewer than 10")
+            print()
+
+            raw = input(f"  P{pos} – enter number (or 0 to finish): ").strip()
+
+            if raw == "0":
+                if not picked:
+                    confirm = input(
+                        "  No drivers picked yet. Cancel prediction? (y/n): "
+                    ).strip().lower()
+                    if confirm == "y":
+                        return None
+                    continue
+                confirm = input(
+                    f"  {len(picked)}/10 picked. Finish early? (y/n): "
+                ).strip().lower()
+                if confirm == "y":
+                    break
+                continue
+
+            try:
+                idx = int(raw) - 1
+                if not (0 <= idx < len(roster)):
+                    raise ValueError
+            except ValueError:
+                input("  Invalid number. Press Enter...")
+                continue
+
+            driver = roster[idx]
+            existing = next((j + 1 for j, p in enumerate(picked) if p is driver), None)
+            if existing:
+                input(f"  {driver['name']} is already at P{existing}. Press Enter...")
+                continue
+
+            picked.append(driver)
+
+        # --- Confirmation screen ---
+        clear_screen()
+        _header(
+            f"Confirm Prediction  –  {player}",
+            race_name,
+        )
+        print()
+        for j, d in enumerate(picked):
+            print(f"  P{j+1:>2}  {d['abbr']}  {d['name']:<22}  {d['team']}")
+        if len(picked) < 10:
+            for j in range(len(picked), 10):
+                print(f"  P{j+1:>2}  ---  (not predicted)")
+        print()
+
+        answer = input("  Save? [y = yes / r = redo / n = cancel]: ").strip().lower()
+        if answer == "y":
+            return [d["key"] for d in picked]
+        if answer == "r":
+            picked = []
+            continue  # restart the selection loop
+        # anything else = cancel
+        return None
+
+
+def enter_predictions(data: dict) -> None:
+    clear_screen()
+    _header("Enter Predictions")
+
+    today = datetime.datetime.now().date().isoformat()
+    upcoming = [
+        r
+        for r in data["races"]
+        if not r.get("actual_results")
+        and (not r.get("date") or r["date"] >= today)
+    ]
+    upcoming.sort(key=lambda x: x.get("date", "9999-12-31"))
+
+    if not upcoming:
+        input("\n  No upcoming races to predict for. Press Enter...")
+        return
+
+    max_name = max(len(r["name"]) for r in upcoming)
+
+    def display_upcoming(r: dict) -> str:
+        date_part = _fmt_date(r.get("date", ""))
+        tag = "← next" if r is upcoming[0] else ""
+        return f"{date_part}   {r['name']:<{max_name}}   {tag}"
+
+    race = select_item(upcoming, "upcoming race", display_upcoming)
     if not race:
         return
-        
+
     player = select_item(data["players"], "player")
     if not player:
         return
-    
+
     if player in race["predictions"]:
-        print("\nWARNING: Prediction already exists for this player and race!")
-        overwrite = input("Do you want to overwrite? (y/n): ").strip().lower()
-        if overwrite != 'y':
+        print(f"\n  WARNING: {player} already has a prediction for {race['name']}.")
+        if input("  Overwrite? (y/n): ").strip().lower() != "y":
             return
-            
-    print(f"\nEnter top 10 prediction for {player} at {race['name']}:")
-    print("Enter the names of the drivers (e.g., 'Verstappen', 'Max', 'VER' etc.)")
-    print("Be consistent with naming to make checking easier.")
-    
-    prediction = get_input_list("Top 10:", max_items=10)
+
+    prediction = _build_prediction(race["name"], player)
+    if prediction is None:
+        input("\n  Prediction cancelled. Press Enter...")
+        return
+
     race["predictions"][player] = prediction
     save_data(data)
-    input(f"\nPrediction for {player} saved successfully! Press Enter...")
+    input(f"\n  ✓  Prediction for {player} saved. Press Enter...")
 
-def fetch_fastf1_results(year, race_name):
-    if not HAS_FASTF1:
-        return None
-    print(f"\nFetching official FastF1 data for {race_name} ({year})...")
-    try:
-        cache_dir = os.path.abspath('fastf1_cache')
-        os.makedirs(cache_dir, exist_ok=True)
-        fastf1.Cache.enable_cache(cache_dir)
-        
-        session = fastf1.get_session(year, race_name, 'R')
-        session.load(telemetry=False, laps=False, weather=False)
-        
-        if 'Position' not in session.results.columns or session.results['Position'].isnull().all():
-            print("\n[!] Official race results are not yet available for this session in FastF1.")
-            return None
-            
-        results = session.results.dropna(subset=['Position']).sort_values(by='Position').head(10)
-        drivers = []
-        for _, row in results.iterrows():
-            drivers.append({
-                "BroadcastName": str(row.get("BroadcastName", "")),
-                "FirstName": str(row.get("FirstName", "")),
-                "LastName": str(row.get("LastName", "")),
-                "Abbreviation": str(row.get("Abbreviation", ""))
-            })
-        return drivers
-    except Exception as e:
-        print(f"Error fetching FastF1 data: {e}")
-        return None
 
-def _fetch_openf1_json(url):
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 points-are-bad/1.0'})
-        with urllib.request.urlopen(req, timeout=10) as response:
-            if response.status != 200:
-                return None
-            return json.loads(response.read().decode())
-    except Exception as e:
-        print(f"Error fetching {url}: {e}")
-        return None
+# ---------------------------------------------------------------------------
+# Results entry
+# ---------------------------------------------------------------------------
 
-def fetch_openf1_results(year, race_name):
-    print(f"\nAttempting to fetch from OpenF1 API for {race_name} ({year})...")
-    try:
-        # First get the meeting key for this specific race
-        meetings_url = f"https://api.openf1.org/v1/meetings?year={year}"
-        meetings = _fetch_openf1_json(meetings_url)
-        if not meetings:
-            return None
-            
-        target_meeting = None
-        for m in meetings:
-            if m.get('meeting_name', '').lower() in race_name.lower() or race_name.lower() in m.get('meeting_name', '').lower():
-                target_meeting = m
-                break
-                
-        if not target_meeting:
-            # Fallback fuzzy matching
-            for m in meetings:
-                if m.get('country_name', '').lower() in race_name.lower() or m.get('location', '').lower() in race_name.lower():
-                    target_meeting = m
-                    break
-                    
-        if not target_meeting:
-            print(f"[!] Could not find meeting matching '{race_name}' in OpenF1.")
-            return None
-            
-        meeting_key = target_meeting['meeting_key']
-        
-        # Now get the Race session for this meeting
-        session_url = f"https://api.openf1.org/v1/sessions?meeting_key={meeting_key}&session_type=Race"
-        sessions = _fetch_openf1_json(session_url)
-        
-        if not sessions or (isinstance(sessions, dict) and 'detail' in sessions):
-            print(f"[!] Could not find a Race session for meeting {target_meeting.get('meeting_name')}.")
-            return None
-            
-        target_session = sessions[0]
-        session_key = target_session['session_key']
-        print(f"Found OpenF1 session: {target_meeting.get('meeting_name')} - {target_session.get('session_name')} (Key: {session_key})")
-        
-        # Now fetch the actual session results
-        res_url = f"https://api.openf1.org/v1/session_result?session_key={session_key}&position<=10"
-        res_data = _fetch_openf1_json(res_url)
-        
-        if isinstance(res_data, dict) and 'detail' in res_data:
-            print(f"[!] OpenF1 API Info: {res_data['detail']}")
-            return None
-            
-        if not res_data:
-             print("[!] OpenF1 does not have session_results populated yet.")
-             return None
-             
-        sorted_results = sorted(res_data, key=lambda x: x['position'])
-        
-        # Get driver metadata for the entire meeting to ensure we get non-null names
-        drivers_url = f"https://api.openf1.org/v1/drivers?meeting_key={meeting_key}"
-        drivers_data = _fetch_openf1_json(drivers_url)
-             
-        driver_map = {}
-        if isinstance(drivers_data, list):
-            for d in drivers_data:
-                d_num = str(d.get('driver_number', ''))
-                # Only map if it has a valid broadcast or full name, or if it's the first time
-                if d_num not in driver_map or d.get('broadcast_name') or d.get('full_name'):
-                    if d.get('broadcast_name') or d.get('full_name') or d_num not in driver_map:
-                        driver_map[d_num] = d
-                
-        results = []
-        for res in sorted_results[:10]:
-            driver_id = str(res['driver_number'])
-            driver_info = driver_map.get(driver_id, {})
-            b_name = driver_info.get("broadcast_name") or driver_info.get("full_name") or str(driver_id)
-            results.append({
-                "BroadcastName": b_name,
-                "FirstName": driver_info.get("first_name") or "",
-                "LastName": driver_info.get("last_name") or "",
-                "Abbreviation": driver_info.get("name_acronym") or ""
-            })
-            
-        return results
-    except Exception as e:
-        print(f"OpenF1 fetching error: {e}")
-        return None
-
-def enter_results(data):
+def enter_results(data: dict) -> None:
     clear_screen()
-    print("--- Enter Actual Race Results ---")
-    
+    _header("Enter Race Results")
+
     today = datetime.datetime.now().date().isoformat()
     past_races = [r for r in data["races"] if r.get("date") and r["date"] <= today]
     past_races.sort(key=lambda x: x.get("date", "0000-00-00"))
-    
+
     if not past_races:
-        input("No completed races available yet. Press Enter...")
+        input("\n  No completed races available yet. Press Enter...")
         return
-        
-    def display_past(r):
-        status = "(Results Logged)" if r.get("actual_results") else "(Needs Results!)"
-        return f"{r['name']} (Date: {r.get('date', 'Unknown')}) {status}"
-        
+
+    max_name = max(len(r["name"]) for r in past_races)
+
+    def display_past(r: dict) -> str:
+        date_part = _fmt_date(r.get("date", ""))
+        tag = "(logged)" if r.get("actual_results") else "(needed)"
+        return f"{date_part}   {r['name']:<{max_name}}   {tag}"
+
     race = select_item(past_races, "completed race", display_past)
     if not race:
         return
-    
+
     if race["actual_results"]:
-        print("\nWARNING: Actual results already exist for this race!")
-        overwrite = input("Do you want to overwrite? (y/n): ").strip().lower()
-        if overwrite != 'y':
+        print(f"\n  WARNING: {race['name']} already has results logged.")
+        if input("  Overwrite? (y/n): ").strip().lower() != "y":
             return
-            
-    choice = input("\nDo you want to fetch results automatically using Official F1 APIs? (y/n): ").strip().lower()
-    if choice == 'y':
+
+    if input("\n  Fetch results automatically via F1 APIs? (y/n): ").strip().lower() == "y":
         try:
-            year = int(input("Enter the race year (e.g. 2024): ").strip())
-            fetched = fetch_fastf1_results(year, race['name']) if HAS_FASTF1 else None
-            
-            if not fetched: # Always fallback to OpenF1 if FastF1 fails or isn't installed
-                fetched = fetch_openf1_results(year, race['name'])
-                
+            year = int(input("  Race year (e.g. 2025): ").strip())
+            fetched = fetch_results(year, race["name"])
+
             if fetched:
-                print("\nSuccessfully fetched Top 10:")
+                print("\n  Fetched Top 10:")
                 for i, d in enumerate(fetched):
-                    print(f"  {i+1}. {d['BroadcastName']}")
-                confirm = input("\nSave these results? (y/n): ").strip().lower()
-                if confirm == 'y':
+                    print(f"    {i+1:>2}.  {d['name']}")
+                if input("\n  Save these results? (y/n): ").strip().lower() == "y":
                     race["actual_results"] = fetched
                     save_data(data)
-                    input(f"\nActual results for {race['name']} saved! Press Enter...")
+                    input(f"\n  ✓  Results for {race['name']} saved. Press Enter...")
                     return
             else:
-                print("Could not fetch data. Falling back to manual entry.")
+                print("  Could not fetch data. Falling back to manual entry.")
         except ValueError:
-            print("Invalid year. Falling back to manual entry.")
-                
-    print(f"\nEnter the TOP 10 actual race results for {race['name']}:")
-    print("IMPORTANT: Try to use names identically to what players typed,")
-    print("However the system will ignore case spaces temporarily.")
-    
+            print("  Invalid year. Falling back to manual entry.")
+
+    print(f"\n  Enter the TOP 10 results for {race['name']}:")
+    print("  The system ignores case — use any consistent name format.")
+
     actual = get_input_list("Top 10:", max_items=10)
     race["actual_results"] = actual
     save_data(data)
-    input(f"\nActual results for {race['name']} saved! Press Enter...")
+    input(f"\n  ✓  Results for {race['name']} saved. Press Enter...")
 
-def calculate_str_equality(a, b):
-    # a is prediction, b is either string or dict (fastf1)
-    p = str(a).strip().lower()
-    # Remove any word joiner or invisible characters that sometimes appear when pasting
-    p = p.replace('\u2060', '').replace('\u200b', '').strip()
-    
-    aliases = {
-        "kimi": "antonelli",
-        "lec": "leclerc",
-        "ver": "verstappen",
-        "max": "verstappen",
-        "ham": "hamilton",
-        "nor": "norris",
-        "pia": "piastri",
-        "rus": "russell",
-        "lind": "lindblad",
-        "linblad": "lindblad",
-        "bor": "bortoleto",
-        "gabby": "bortoleto",
-        "gab": "bortoleto",
-        "hadj": "hadjar",
-        "alo": "alonso",
-        "per": "perez",
-        "checo": "perez",
-        "gas": "gasly",
-        "oco": "ocon",
-        "tsu": "tsunoda",
-        "yuki": "tsunoda",
-        "hul": "hulkenberg",
-        "str": "stroll",
-        "mag": "magnussen",
-        "alb": "albon",
-        "col": "colapinto",
-        "bea": "bearman",
-        "ollie": "bearman",
-        "sai": "sainz",
-        "zho": "zhou",
-        "bot": "bottas",
-        "law": "lawson",
-        "doo": "doohan"
-    }
-    
-    if p in aliases:
-        p = aliases[p]
 
-    if isinstance(b, dict):
-        # Exact match of any field
-        for val in b.values():
-            if val and p == str(val).strip().lower():
-                return True
-        # Substring match on BroadcastName or LastName
-        for val in b.values():
-            if val and p in str(val).strip().lower():
-                return True
-        return False
-    else:
-        b_str = str(b).strip().lower()
-        if b_str in aliases:
-            b_str = aliases[b_str]
-        return p == b_str or p in b_str
+# ---------------------------------------------------------------------------
+# Views
+# ---------------------------------------------------------------------------
 
-def calculate_player_points_for_race(prediction, actual):
-    points = 0
-    # Both lists should be length 10
-    for i in range(min(len(prediction), len(actual))):
-        if not calculate_str_equality(prediction[i], actual[i]):
-            points += 1
-    # Adding points for missing predictions or results up to 10
-    diff = abs(len(prediction) - len(actual))
-    points += diff 
-    return points
+def _act_display(actual_entry) -> str:
+    """Return a display string for one actual-result entry."""
+    if actual_entry is None:
+        return "(none)"
+    if isinstance(actual_entry, dict):
+        return actual_entry.get("name", str(actual_entry))
+    return str(actual_entry)
 
-def view_race_points(data):
+
+def view_race_points(data: dict) -> None:
     clear_screen()
-    print("--- View Race Points ---")
-    
+    _header("View Race Points")
+
     today = datetime.datetime.now().date().isoformat()
     sorted_races = sorted(data["races"], key=lambda x: x.get("date", "9999-12-31"))
-    
-    def display_race(r):
-        status = "(Results Added)" if r.get("actual_results") else "(No Results Yet)"
-        is_past = "[COMPLETED]" if r.get("actual_results") or (r.get("date") and r["date"] < today) else "[UPCOMING]"
-        return f"{r['name']} {is_past} - {status}"
-        
+
+    max_name = max((len(r["name"]) for r in sorted_races), default=0)
+
+    def display_race(r: dict) -> str:
+        date_part = _fmt_date(r.get("date", ""))
+        has_results = bool(r.get("actual_results"))
+        tag = "(results logged)" if has_results else "(no results yet)"
+        status = (
+            "[done]"
+            if has_results or (r.get("date") and r["date"] < today)
+            else "[upcoming]"
+        )
+        return f"{date_part}   {r['name']:<{max_name}}   {status}  {tag}"
+
     race = select_item(sorted_races, "race", display_race)
     if not race:
         return
-    actual = race["actual_results"]
-    
-    print(f"\n--- {race['name']} Points ---")
-    if not actual:
-        print("Actual results not yet added for this race. Cannot calculate points.")
-    else:
-        if not race["predictions"]:
-            print("No predictions were made for this race.")
-        else:
-            print("Scores (Lower is better!):")
-            for player, prediction in race["predictions"].items():
-                pts = calculate_player_points_for_race(prediction, actual)
-                print(f" - {player}: {pts} points")
-                
-            print("\nBreakdown for each player:")
-            for player, prediction in race["predictions"].items():
-                print(f"\n{player}'s Prediction Breakdown:")
-                pts = 0
-                for i in range(10):
-                    pred = prediction[i] if i < len(prediction) else "(None)"
-                    
-                    if i < len(actual):
-                        act_val = actual[i]
-                        act = act_val.get("BroadcastName", str(act_val)) if isinstance(act_val, dict) else str(act_val)
-                    else:
-                        act = "(None)"
-                        
-                    if calculate_str_equality(pred, actual[i] if i < len(actual) else "(None)"):
-                        print(f"  P{i+1}: {act} [CORRECT]")
-                    else:
-                        print(f"  P{i+1}: Predicted {pred}, Actual was {act} [+1 Point]")
-                        pts += 1
-                print(f"  Total for {player}: {pts} points")
-                
-    input("\nPress Enter to continue...")
 
-def view_standings(data):
+    actual = race["actual_results"]
+    date_label = _fmt_date(race.get("date", ""))
+    print()
+    _header(f"{race['name']}  •  {date_label}")
+    print()
+
+    if not actual:
+        print("  No results logged for this race yet.")
+        input("\n  Press Enter to continue...")
+        return
+
+    # --- Score summary ---
+    _rule("Scores  (lower is better)")
+    max_pname = max((len(p) for p in data["players"]), default=0)
+    for player in data["players"]:
+        if player in race["predictions"]:
+            pts = calculate_player_points_for_race(race["predictions"][player], actual)
+            print(f"  {player:<{max_pname}}   {pts} pts")
+        else:
+            print(f"  {player:<{max_pname}}   10 pts  (no prediction – penalty)")
+    _rule()
+
+    # --- Per-player breakdown ---
+    print()
+    for player in data["players"]:
+        _rule(f"Breakdown – {player}")
+
+        if player not in race["predictions"]:
+            print("  No prediction submitted – +10 point penalty")
+            print()
+            continue
+
+        prediction = race["predictions"][player]
+        pts = 0
+
+        for i in range(10):
+            pred = prediction[i] if i < len(prediction) else None
+            actual_entry = actual[i] if i < len(actual) else None
+
+            if pred is None and actual_entry is None:
+                continue
+
+            act = _act_display(actual_entry)
+            delta = score_position(pred, actual_entry)
+            pts += delta
+
+            if delta == 0:
+                print(f"  P{i+1:>2}   OK   {act}")
+            else:
+                pred_str = pred if pred is not None else "(none)"
+                print(f"  P{i+1:>2}   +1   {pred_str!r}  →  {act}")
+
+        print(f"  {'─' * 30}")
+        print(f"  Total: {pts} pts")
+        print()
+
+    input("  Press Enter to continue...")
+
+
+def view_standings(data: dict) -> None:
     clear_screen()
-    print("=== SEASON STANDINGS (Lowest Points = WINNING) ===")
-    
-    player_scores = {p: 0 for p in data["players"]}
-    
-    races_counted = 0
-    for race in data["races"]:
-        actual = race["actual_results"]
-        if actual:
-            races_counted += 1
-            for player, prediction in race["predictions"].items():
-                # Add score if player exists and made prediction
-                if player in player_scores:
-                    pts = calculate_player_points_for_race(prediction, actual)
-                    player_scores[player] += pts
-                # What if they didn't predict? They should probably get max points (10)?
-                # Or maybe 10 points penalty if missing prediction?
-            
-            # For players who didn't predict this round but are part of the game:
-            for player in data["players"]:
-                if player not in race["predictions"]:
-                    player_scores[player] += 10 # 10 penalty for not predicting
-                    
-    # Sort by lowest score
-    sorted_players = sorted(player_scores.items(), key=lambda x: x[1])
-    
-    print(f"\nStandings after {races_counted} race(s) with actual results:")
-    print("-------------------------------------------------")
-    for i, (player, score) in enumerate(sorted_players):
-        print(f"{i+1}. {player} - {score} points")
-    print("-------------------------------------------------")
-    print("* Note: Missing a prediction for a completed race gives you +10 points.")
-    
-    input("\nPress Enter to continue...")
+    scores, races_counted = calculate_season_standings(data)
+    sorted_players = sorted(scores.items(), key=lambda x: x[1])
+
+    _header(
+        "Season Standings  •  Lowest Score Wins",
+        f"After {races_counted} of {len(data['races'])} races",
+    )
+    print()
+
+    if not sorted_players:
+        print("  No players yet.")
+    else:
+        max_pname = max(len(p) for p, _ in sorted_players)
+        _rule()
+        print(f"  {'#':<4} {'Player':<{max_pname}}   Points")
+        _rule()
+        for i, (player, score) in enumerate(sorted_players):
+            print(f"  {i+1:<4} {player:<{max_pname}}   {score}")
+        _rule()
+
+    print()
+    print("  * Missing a prediction for a completed race = +10 pts")
+    input("\n  Press Enter to continue...")
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     try:
         main_menu()
     except KeyboardInterrupt:
-        print("\nExiting...")
+        print("\n  Exiting...")
         sys.exit(0)
