@@ -13,14 +13,17 @@ import datetime
 import os
 import re
 import sys
-from collections.abc import Callable
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from .api import HAS_FASTF1, fetch_results, get_schedule_updates
 from .drivers import ROSTER
-from .models import DriverInfo, DriverResult, GameData, RaceData
 from .scoring import calculate_player_points_for_race, calculate_season_standings, score_position
 from .storage import load_data, save_data
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from .models import DriverInfo, DriverResult, GameData, RaceData
 
 _T = TypeVar("_T")
 
@@ -83,6 +86,7 @@ def _season_context(data: GameData) -> str:
 # Terminal helpers
 # ---------------------------------------------------------------------------
 
+
 def clear_screen() -> None:
     os.system("cls" if os.name == "nt" else "clear")
 
@@ -106,15 +110,12 @@ def parse_raw_input_lines(lines: list[str], max_items: int) -> list[str]:
 
 def get_input_list(prompt: str, min_items: int = 10, max_items: int = 10) -> list[str]:
     print(f"\n  {prompt}")
-    print(
-        "  (Paste a list directly, or type one per line."
-        " Empty line to finish.)"
-    )
+    print("  (Paste a list directly, or type one per line. Empty line to finish.)")
 
     lines: list[str] = []
     while True:
         try:
-            label = f"  {len(lines)+1:>2}. " if len(lines) < max_items else "  ... "
+            label = f"  {len(lines) + 1:>2}. " if len(lines) < max_items else "  ... "
             line = input(label).strip()
         except EOFError:
             break
@@ -125,10 +126,7 @@ def get_input_list(prompt: str, min_items: int = 10, max_items: int = 10) -> lis
             parsed = parse_raw_input_lines(lines, max_items)
             if len(parsed) >= min_items:
                 break
-            confirm = input(
-                f"\n  Only {len(parsed)} items entered."
-                " Done? (y/n): "
-            ).strip().lower()
+            confirm = input(f"\n  Only {len(parsed)} items entered. Done? (y/n): ").strip().lower()
             if confirm == "y":
                 break
             continue
@@ -153,7 +151,7 @@ def select_item(
 
     print()
     for i, item in enumerate(items):
-        print(f"  [{i+1}] {display_func(item)}")
+        print(f"  [{i + 1}] {display_func(item)}")
 
     try:
         idx = int(input(f"\n  Select [1-{len(items)}]: ")) - 1
@@ -168,6 +166,7 @@ def select_item(
 # ---------------------------------------------------------------------------
 # Auto-update on startup
 # ---------------------------------------------------------------------------
+
 
 def auto_update_past_races(data: GameData) -> None:
     today = datetime.datetime.now().date().isoformat()
@@ -203,6 +202,7 @@ def auto_update_past_races(data: GameData) -> None:
 # ---------------------------------------------------------------------------
 # Main menu
 # ---------------------------------------------------------------------------
+
 
 def main_menu() -> None:
     data = load_data()
@@ -251,6 +251,7 @@ def main_menu() -> None:
 # Player management
 # ---------------------------------------------------------------------------
 
+
 def manage_players(data: GameData) -> None:
     while True:
         clear_screen()
@@ -298,6 +299,7 @@ def manage_players(data: GameData) -> None:
 # Race management
 # ---------------------------------------------------------------------------
 
+
 def manage_races(data: GameData) -> None:
     while True:
         clear_screen()
@@ -308,10 +310,7 @@ def manage_races(data: GameData) -> None:
             print("  No races added yet.")
         else:
             done = sum(1 for r in data["races"] if r.get("actual_results"))
-            print(
-                f"  {len(data['races'])} races scheduled"
-                f"  •  {done} with results"
-            )
+            print(f"  {len(data['races'])} races scheduled  •  {done} with results")
 
         print()
         _rule()
@@ -362,10 +361,7 @@ def manage_races(data: GameData) -> None:
 def _auto_populate_schedule(data: GameData) -> None:
     """CLI wrapper: call api.get_schedule_updates, apply changes, save."""
     if not HAS_FASTF1:
-        input(
-            "\n  FastF1 is not installed."
-            " Please install it to use this feature. Press Enter..."
-        )
+        input("\n  FastF1 is not installed. Please install it to use this feature. Press Enter...")
         return
 
     year = datetime.datetime.now().year
@@ -400,6 +396,7 @@ def _auto_populate_schedule(data: GameData) -> None:
 # Predictions
 # ---------------------------------------------------------------------------
 
+
 def _render_driver_list(roster: list[DriverInfo], picked: list[DriverInfo]) -> None:
     """Print the numbered driver roster, marking already-picked drivers."""
     current_team = ""
@@ -413,9 +410,9 @@ def _render_driver_list(roster: list[DriverInfo], picked: list[DriverInfo]) -> N
         pick_pos = next((j + 1 for j, p in enumerate(picked) if p is d), None)
         if pick_pos:
             tag = f"✓ P{pick_pos:<2}"
-            print(f"  [{i+1:>2}]  {d['abbr']}  {d['name']:<22}  {tag}")
+            print(f"  [{i + 1:>2}]  {d['abbr']}  {d['name']:<22}  {tag}")
         else:
-            print(f"  [{i+1:>2}]  {d['abbr']}  {d['name']:<22}  {d['team']}")
+            print(f"  [{i + 1:>2}]  {d['abbr']}  {d['name']:<22}  {d['team']}")
 
 
 def _build_prediction(race_name: str, player: str) -> list[str] | None:
@@ -442,7 +439,7 @@ def _build_prediction(race_name: str, player: str) -> list[str] | None:
                 print("  (none yet)")
             else:
                 for j, d in enumerate(picked):
-                    print(f"  P{j+1:>2}  {d['abbr']}  {d['name']}")
+                    print(f"  P{j + 1:>2}  {d['abbr']}  {d['name']}")
 
             # Driver list
             print()
@@ -457,15 +454,13 @@ def _build_prediction(race_name: str, player: str) -> list[str] | None:
 
             if raw == "0":
                 if not picked:
-                    confirm = input(
-                        "  No drivers picked yet. Cancel prediction? (y/n): "
-                    ).strip().lower()
+                    confirm = (
+                        input("  No drivers picked yet. Cancel prediction? (y/n): ").strip().lower()
+                    )
                     if confirm == "y":
                         return None
                     continue
-                confirm = input(
-                    f"  {len(picked)}/10 picked. Finish early? (y/n): "
-                ).strip().lower()
+                confirm = input(f"  {len(picked)}/10 picked. Finish early? (y/n): ").strip().lower()
                 if confirm == "y":
                     break
                 continue
@@ -494,10 +489,10 @@ def _build_prediction(race_name: str, player: str) -> list[str] | None:
         )
         print()
         for j, d in enumerate(picked):
-            print(f"  P{j+1:>2}  {d['abbr']}  {d['name']:<22}  {d['team']}")
+            print(f"  P{j + 1:>2}  {d['abbr']}  {d['name']:<22}  {d['team']}")
         if len(picked) < 10:
             for j in range(len(picked), 10):
-                print(f"  P{j+1:>2}  ---  (not predicted)")
+                print(f"  P{j + 1:>2}  ---  (not predicted)")
         print()
 
         answer = input("  Save? [y = yes / r = redo / n = cancel]: ").strip().lower()
@@ -518,8 +513,7 @@ def enter_predictions(data: GameData) -> None:
     upcoming = [
         r
         for r in data["races"]
-        if not r.get("actual_results")
-        and (not r.get("date") or r["date"] >= today)
+        if not r.get("actual_results") and (not r.get("date") or r["date"] >= today)
     ]
     upcoming.sort(key=lambda x: x.get("date", "9999-12-31"))
 
@@ -561,6 +555,7 @@ def enter_predictions(data: GameData) -> None:
 # Results entry
 # ---------------------------------------------------------------------------
 
+
 def enter_results(data: GameData) -> None:
     clear_screen()
     _header("Enter Race Results")
@@ -597,7 +592,7 @@ def enter_results(data: GameData) -> None:
             if fetched:
                 print("\n  Fetched Top 10:")
                 for i, d in enumerate(fetched):
-                    print(f"    {i+1:>2}.  {d['name']}")
+                    print(f"    {i + 1:>2}.  {d['name']}")
                 if input("\n  Save these results? (y/n): ").strip().lower() == "y":
                     race["actual_results"] = fetched  # type: ignore[typeddict-item]
                     save_data(data)
@@ -621,6 +616,7 @@ def enter_results(data: GameData) -> None:
 # Views
 # ---------------------------------------------------------------------------
 
+
 def _act_display(actual_entry: DriverResult | str | None) -> str:
     """Return a display string for one actual-result entry."""
     if actual_entry is None:
@@ -643,11 +639,7 @@ def view_race_points(data: GameData) -> None:
         date_part = _fmt_date(r.get("date", ""))
         has_results = bool(r.get("actual_results"))
         tag = "(results logged)" if has_results else "(no results yet)"
-        status = (
-            "[done]"
-            if has_results or (r.get("date") and r["date"] < today)
-            else "[upcoming]"
-        )
+        status = "[done]" if has_results or (r.get("date") and r["date"] < today) else "[upcoming]"
         return f"{date_part}   {r['name']:<{max_name}}   {status}  {tag}"
 
     race = select_item(sorted_races, "race", display_race)
@@ -701,10 +693,10 @@ def view_race_points(data: GameData) -> None:
             pts += delta
 
             if delta == 0:
-                print(f"  P{i+1:>2}   OK   {act}")
+                print(f"  P{i + 1:>2}   OK   {act}")
             else:
                 pred_str = pred if pred is not None else "(none)"
-                print(f"  P{i+1:>2}   +1   {pred_str!r}  →  {act}")
+                print(f"  P{i + 1:>2}   +1   {pred_str!r}  →  {act}")
 
         print(f"  {'─' * 30}")
         print(f"  Total: {pts} pts")
@@ -732,7 +724,7 @@ def view_standings(data: GameData) -> None:
         print(f"  {'#':<4} {'Player':<{max_pname}}   Points")
         _rule()
         for i, (player, score) in enumerate(sorted_players):
-            print(f"  {i+1:<4} {player:<{max_pname}}   {score}")
+            print(f"  {i + 1:<4} {player:<{max_pname}}   {score}")
         _rule()
 
     print()

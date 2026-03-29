@@ -23,6 +23,7 @@ from points_are_bad.scoring import (
 # _normalize
 # ---------------------------------------------------------------------------
 
+
 class TestNormalize:
     def test_lowercases(self):
         assert _normalize("Verstappen") == "verstappen"
@@ -54,6 +55,7 @@ class TestNormalize:
 # ---------------------------------------------------------------------------
 # calculate_str_equality – string vs string
 # ---------------------------------------------------------------------------
+
 
 class TestCalculateStrEqualityStrings:
     def test_exact_match(self):
@@ -91,6 +93,7 @@ class TestCalculateStrEqualityStrings:
 # calculate_str_equality – dict (FastF1 / OpenF1 result object)
 # ---------------------------------------------------------------------------
 
+
 class TestCalculateStrEqualityDict:
     VERSTAPPEN = {
         "BroadcastName": "M VERSTAPPEN",
@@ -119,7 +122,12 @@ class TestCalculateStrEqualityDict:
         assert not calculate_str_equality("hamilton", self.VERSTAPPEN)
 
     def test_empty_values_in_dict_ignored(self):
-        sparse = {"BroadcastName": "", "FirstName": None, "LastName": "Verstappen", "Abbreviation": ""}  # noqa: E501
+        sparse = {
+            "BroadcastName": "",
+            "FirstName": None,
+            "LastName": "Verstappen",
+            "Abbreviation": "",
+        }  # noqa: E501
         assert calculate_str_equality("verstappen", sparse)
 
     def test_none_sentinel_does_not_match_dict(self):
@@ -129,6 +137,7 @@ class TestCalculateStrEqualityDict:
 # ---------------------------------------------------------------------------
 # score_position
 # ---------------------------------------------------------------------------
+
 
 class TestScorePosition:
     VER_DICT = {
@@ -167,8 +176,16 @@ class TestScorePosition:
 # Fixture helpers: use plain strings for simplicity (string path of
 # calculate_str_equality is exercised).
 ACTUAL_10 = [
-    "verstappen", "norris", "piastri", "leclerc", "hamilton",
-    "russell", "sainz", "alonso", "perez", "stroll",
+    "verstappen",
+    "norris",
+    "piastri",
+    "leclerc",
+    "hamilton",
+    "russell",
+    "sainz",
+    "alonso",
+    "perez",
+    "stroll",
 ]
 
 
@@ -181,8 +198,18 @@ class TestCalculatePlayerPointsForRace:
         # Use values that cannot accidentally substring-match any driver name.
         # Single-char values like "j" would match "stroll" via the substring
         # path, which is intentional app behaviour, not a bug.
-        prediction = ["zzz1", "zzz2", "zzz3", "zzz4", "zzz5",
-                      "zzz6", "zzz7", "zzz8", "zzz9", "zzz10"]
+        prediction = [
+            "zzz1",
+            "zzz2",
+            "zzz3",
+            "zzz4",
+            "zzz5",
+            "zzz6",
+            "zzz7",
+            "zzz8",
+            "zzz9",
+            "zzz10",
+        ]
         assert calculate_player_points_for_race(prediction, ACTUAL_10) == 10
 
     def test_one_wrong_one_point(self):
@@ -231,6 +258,7 @@ class TestCalculatePlayerPointsForRace:
 # ---------------------------------------------------------------------------
 # calculate_season_standings
 # ---------------------------------------------------------------------------
+
 
 def _make_race(name, actual, predictions):
     return {

@@ -51,6 +51,7 @@ except ImportError:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _fetch_openf1_json(url: str) -> list[Any] | dict[str, Any] | None:
     """Fetch *url* with ``urllib.request`` and return parsed JSON.
 
@@ -58,9 +59,7 @@ def _fetch_openf1_json(url: str) -> list[Any] | dict[str, Any] | None:
     Returns ``None`` on any network or parse error.
     """
     try:
-        req = urllib.request.Request(
-            url, headers={"User-Agent": "Mozilla/5.0 points-are-bad/1.0"}
-        )
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 points-are-bad/1.0"})
         with urllib.request.urlopen(req, timeout=10) as response:
             if response.status != 200:
                 return None
@@ -80,6 +79,7 @@ def _fetch_openf1_json(url: str) -> list[Any] | dict[str, Any] | None:
 # FastF1
 # ---------------------------------------------------------------------------
 
+
 def fetch_fastf1_results(year: int, race_name: str) -> list[DriverResult] | None:
     """Return the top-10 results for *race_name* from the FastF1 API.
 
@@ -98,18 +98,11 @@ def fetch_fastf1_results(year: int, race_name: str) -> list[DriverResult] | None
         session = fastf1.get_session(year, race_name, "R")
         session.load(telemetry=False, laps=False, weather=False)
 
-        if (
-            "Position" not in session.results.columns
-            or session.results["Position"].isnull().all()
-        ):
+        if "Position" not in session.results.columns or session.results["Position"].isnull().all():
             _log.info("Official race results not yet available in FastF1 for %s.", race_name)
             return None
 
-        results = (
-            session.results.dropna(subset=["Position"])
-            .sort_values(by="Position")
-            .head(10)
-        )
+        results = session.results.dropna(subset=["Position"]).sort_values(by="Position").head(10)
         drivers: list[DriverResult] = []
         for _, row in results.iterrows():
             first = str(row.get("FirstName", "")).strip()
@@ -130,6 +123,7 @@ def fetch_fastf1_results(year: int, race_name: str) -> list[DriverResult] | None
 # OpenF1
 # ---------------------------------------------------------------------------
 
+
 def fetch_openf1_results(year: int, race_name: str) -> list[DriverResult] | None:
     """Return the top-10 results for *race_name* from the OpenF1 API.
 
@@ -141,9 +135,7 @@ def fetch_openf1_results(year: int, race_name: str) -> list[DriverResult] | None
     _log.info("Attempting to fetch from OpenF1 API for %s (%s)...", race_name, year)
     try:
         # Step 1: resolve meeting key
-        meetings = _fetch_openf1_json(
-            f"https://api.openf1.org/v1/meetings?year={year}"
-        )
+        meetings = _fetch_openf1_json(f"https://api.openf1.org/v1/meetings?year={year}")
         if not meetings or not isinstance(meetings, list):
             return None
 
@@ -171,8 +163,7 @@ def fetch_openf1_results(year: int, race_name: str) -> list[DriverResult] | None
 
         # Step 2: find the Race session
         sessions = _fetch_openf1_json(
-            f"https://api.openf1.org/v1/sessions"
-            f"?meeting_key={meeting_key}&session_type=Race"
+            f"https://api.openf1.org/v1/sessions?meeting_key={meeting_key}&session_type=Race"
         )
         if not sessions or (isinstance(sessions, dict) and "detail" in sessions):
             _log.warning(
@@ -192,8 +183,7 @@ def fetch_openf1_results(year: int, race_name: str) -> list[DriverResult] | None
 
         # Step 3: fetch session results
         res_data = _fetch_openf1_json(
-            f"https://api.openf1.org/v1/session_result"
-            f"?session_key={session_key}&position<=10"
+            f"https://api.openf1.org/v1/session_result?session_key={session_key}&position<=10"
         )
         if isinstance(res_data, dict) and "detail" in res_data:
             _log.info("OpenF1 API info: %s", res_data["detail"])
@@ -213,11 +203,7 @@ def fetch_openf1_results(year: int, race_name: str) -> list[DriverResult] | None
         if isinstance(drivers_data, list):
             for d in drivers_data:
                 d_num = str(d.get("driver_number", ""))
-                if (
-                    d.get("broadcast_name")
-                    or d.get("full_name")
-                    or d_num not in driver_map
-                ):
+                if d.get("broadcast_name") or d.get("full_name") or d_num not in driver_map:
                     driver_map[d_num] = d
 
         api_results: list[DriverResult] = []
@@ -257,6 +243,7 @@ def fetch_results(year: int, race_name: str) -> list[DriverResult] | None:
 # ---------------------------------------------------------------------------
 # Schedule
 # ---------------------------------------------------------------------------
+
 
 def get_schedule_updates(
     existing_races: list[RaceData],

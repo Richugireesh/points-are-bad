@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
-from points_are_bad.models import GameData
+if TYPE_CHECKING:
+    from points_are_bad.models import GameData
 
 
 @pytest.fixture()

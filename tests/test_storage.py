@@ -22,6 +22,7 @@ def isolated_data_file(tmp_path, monkeypatch):
 # load_data
 # ---------------------------------------------------------------------------
 
+
 class TestLoadData:
     def test_returns_default_when_no_file(self, isolated_data_file):
         assert not os.path.exists(isolated_data_file)
@@ -55,6 +56,7 @@ class TestLoadData:
 # save_data
 # ---------------------------------------------------------------------------
 
+
 class TestSaveData:
     def test_creates_file(self, isolated_data_file):
         data = {"players": ["alice"], "races": []}
@@ -84,6 +86,7 @@ class TestSaveData:
 # Round-trip
 # ---------------------------------------------------------------------------
 
+
 class TestRoundTrip:
     def test_save_then_load_identity(self, isolated_data_file):
         original = {
@@ -93,8 +96,12 @@ class TestRoundTrip:
                     "name": "Bahrain GP",
                     "date": "2026-03-01",
                     "actual_results": [
-                        {"BroadcastName": "M VERSTAPPEN", "Abbreviation": "VER",
-                         "FirstName": "Max", "LastName": "Verstappen"}
+                        {
+                            "BroadcastName": "M VERSTAPPEN",
+                            "Abbreviation": "VER",
+                            "FirstName": "Max",
+                            "LastName": "Verstappen",
+                        }
                     ],
                     "predictions": {"alice": ["verstappen", "norris"]},
                 }
@@ -107,6 +114,7 @@ class TestRoundTrip:
 # ---------------------------------------------------------------------------
 # Error handling
 # ---------------------------------------------------------------------------
+
 
 class TestStorageErrors:
     def test_load_raises_storage_error_on_corrupt_json(self, isolated_data_file):

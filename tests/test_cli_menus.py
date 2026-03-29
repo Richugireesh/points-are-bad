@@ -6,7 +6,7 @@ suppressed globally by the conftest.py autouse fixture.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -28,10 +28,10 @@ from points_are_bad.cli import (
 )
 from points_are_bad.drivers import ROSTER
 
-
 # ---------------------------------------------------------------------------
 # _header / _rule
 # ---------------------------------------------------------------------------
+
 
 class TestHeaderRule:
     def test_header_prints_border_and_content(self, capsys):
@@ -57,6 +57,7 @@ class TestHeaderRule:
 # ---------------------------------------------------------------------------
 # get_input_list
 # ---------------------------------------------------------------------------
+
 
 class TestGetInputList:
     def test_ten_items_inline(self, monkeypatch):
@@ -84,6 +85,7 @@ class TestGetInputList:
 # ---------------------------------------------------------------------------
 # auto_update_past_races
 # ---------------------------------------------------------------------------
+
 
 class TestAutoUpdatePastRaces:
     def test_no_past_races_does_nothing(self, sample_data):
@@ -125,6 +127,7 @@ class TestAutoUpdatePastRaces:
 # manage_players
 # ---------------------------------------------------------------------------
 
+
 class TestManagePlayers:
     def test_back_exits(self, monkeypatch, sample_data):
         monkeypatch.setattr("builtins.input", lambda _: "3")
@@ -164,6 +167,7 @@ class TestManagePlayers:
 # ---------------------------------------------------------------------------
 # manage_races
 # ---------------------------------------------------------------------------
+
 
 class TestManageRaces:
     def test_back_exits(self, monkeypatch, sample_data):
@@ -205,6 +209,7 @@ class TestManageRaces:
 # _auto_populate_schedule
 # ---------------------------------------------------------------------------
 
+
 class TestAutoPopulateSchedule:
     def test_no_fastf1_prompts_with_message(self, monkeypatch, sample_data):
         monkeypatch.setattr(cli_mod, "HAS_FASTF1", False)
@@ -215,7 +220,12 @@ class TestAutoPopulateSchedule:
 
     def test_adds_new_races_from_schedule(self, monkeypatch, sample_data):
         monkeypatch.setattr(cli_mod, "HAS_FASTF1", True)
-        new_race = {"name": "Monaco GP", "date": "2026-05-25", "actual_results": [], "predictions": {}}
+        new_race = {
+            "name": "Monaco GP",
+            "date": "2026-05-25",
+            "actual_results": [],
+            "predictions": {},
+        }
         monkeypatch.setattr("builtins.input", lambda _: "")
         with (
             patch.object(cli_mod, "get_schedule_updates", return_value=([new_race], [])),
@@ -238,6 +248,7 @@ class TestAutoPopulateSchedule:
 # _render_driver_list
 # ---------------------------------------------------------------------------
 
+
 class TestRenderDriverList:
     def test_prints_all_drivers(self, capsys):
         roster = ROSTER[:4]
@@ -258,6 +269,7 @@ class TestRenderDriverList:
 # ---------------------------------------------------------------------------
 # enter_predictions
 # ---------------------------------------------------------------------------
+
 
 class TestEnterPredictions:
     def test_no_upcoming_races_exits_early(self, monkeypatch, sample_data):
@@ -280,6 +292,7 @@ class TestEnterPredictions:
 # enter_results
 # ---------------------------------------------------------------------------
 
+
 class TestEnterResults:
     def test_no_past_races_exits_early(self, monkeypatch, sample_data):
         # Only keep the future race
@@ -291,15 +304,25 @@ class TestEnterResults:
 
     def test_manual_entry_saves_results(self, monkeypatch, sample_data):
         # Select race 1 (Bahrain, with existing results), overwrite, manual entry
-        responses = iter([
-            "1",       # select Bahrain
-            "y",       # overwrite existing results
-            "n",       # don't auto-fetch
-            "ver", "nor", "pia", "lec", "ham",  # 5 drivers
-            "rus", "sai", "alo", "per", "str",  # 5 more
-            "",        # finish input
-            "",        # "Press Enter to continue"
-        ])
+        responses = iter(
+            [
+                "1",  # select Bahrain
+                "y",  # overwrite existing results
+                "n",  # don't auto-fetch
+                "ver",
+                "nor",
+                "pia",
+                "lec",
+                "ham",  # 5 drivers
+                "rus",
+                "sai",
+                "alo",
+                "per",
+                "str",  # 5 more
+                "",  # finish input
+                "",  # "Press Enter to continue"
+            ]
+        )
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         with patch.object(cli_mod, "save_data"):
             enter_results(sample_data)
@@ -310,6 +333,7 @@ class TestEnterResults:
 # ---------------------------------------------------------------------------
 # view_race_points
 # ---------------------------------------------------------------------------
+
 
 class TestViewRacePoints:
     def test_race_without_results_shows_message(self, monkeypatch, capsys, sample_data):
@@ -338,6 +362,7 @@ class TestViewRacePoints:
 # view_standings
 # ---------------------------------------------------------------------------
 
+
 class TestViewStandings:
     def test_shows_standings(self, monkeypatch, capsys, sample_data):
         monkeypatch.setattr("builtins.input", lambda _: "")
@@ -357,6 +382,7 @@ class TestViewStandings:
 # ---------------------------------------------------------------------------
 # main_menu
 # ---------------------------------------------------------------------------
+
 
 class TestMainMenu:
     def test_exit_choice_saves_and_exits(self, monkeypatch, sample_data):

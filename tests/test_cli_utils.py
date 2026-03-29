@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import datetime
 
-import pytest
-
-import points_are_bad.cli as cli_mod
 from points_are_bad.cli import (
     _act_display,
     _fmt_date,
@@ -15,10 +12,10 @@ from points_are_bad.cli import (
     select_item,
 )
 
-
 # ---------------------------------------------------------------------------
 # _fmt_date
 # ---------------------------------------------------------------------------
+
 
 class TestFmtDate:
     def test_valid_iso_date(self):
@@ -38,6 +35,7 @@ class TestFmtDate:
 # ---------------------------------------------------------------------------
 # _season_context
 # ---------------------------------------------------------------------------
+
 
 class TestSeasonContext:
     def test_output_contains_year(self):
@@ -67,6 +65,7 @@ class TestSeasonContext:
 # _act_display
 # ---------------------------------------------------------------------------
 
+
 class TestActDisplay:
     def test_none_returns_none_str(self):
         assert _act_display(None) == "(none)"
@@ -85,6 +84,7 @@ class TestActDisplay:
 # ---------------------------------------------------------------------------
 # parse_raw_input_lines
 # ---------------------------------------------------------------------------
+
 
 class TestParseRawInputLines:
     def test_numbered_list(self):
@@ -134,6 +134,7 @@ class TestParseRawInputLines:
 # select_item
 # ---------------------------------------------------------------------------
 
+
 class TestSelectItem:
     def test_valid_selection_returns_item(self, monkeypatch):
         monkeypatch.setattr("builtins.input", lambda _: "1")
@@ -176,21 +177,25 @@ class TestSelectItem:
 # Box drawing helpers
 # ---------------------------------------------------------------------------
 
+
 class TestBoxHelpers:
     def test_box_top_starts_with_corner(self):
         from points_are_bad.cli import _box_top
+
         result = _box_top()
         assert result.startswith("╔")
         assert result.endswith("╗")
 
     def test_box_bot_starts_with_corner(self):
         from points_are_bad.cli import _box_bot
+
         result = _box_bot()
         assert result.startswith("╚")
         assert result.endswith("╝")
 
     def test_box_row_contains_text(self):
         from points_are_bad.cli import _box_row
+
         result = _box_row("hello")
         assert "hello" in result
         assert result.startswith("║")
