@@ -23,9 +23,23 @@ import logging
 import os
 import urllib.error
 import urllib.request
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .models import DriverResult, RaceData
+
+__all__ = [
+    "HAS_FASTF1",
+    "fetch_fastf1_results",
+    "fetch_openf1_results",
+    "fetch_results",
+    "get_schedule_updates",
+]
+
+_log = logging.getLogger(__name__)
 
 try:
-    import fastf1  # type: ignore[import-untyped]
+    import fastf1
 
     HAS_FASTF1 = True
     logging.getLogger("fastf1.req").setLevel(logging.CRITICAL)
@@ -37,7 +51,7 @@ except ImportError:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _fetch_openf1_json(url: str) -> "list | dict | None":
+def _fetch_openf1_json(url: str) -> list[Any] | dict[str, Any] | None:
     """Fetch *url* with ``urllib.request`` and return parsed JSON.
 
     Using urllib bypasses FastF1's global requests-cache monkey-patch.
@@ -50,9 +64,15 @@ def _fetch_openf1_json(url: str) -> "list | dict | None":
         with urllib.request.urlopen(req, timeout=10) as response:
             if response.status != 200:
                 return None
-            return json.loads(response.read().decode())
-    except Exception as e:
-        print(f"Error fetching {url}: {e}")
+            return json.loads(response.read().decode())  # type: ignore[no-any-return]
+    except (
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+        TimeoutError,
+        json.JSONDecodeError,
+        OSError,
+    ) as e:
+        _log.warning("Error fetching %s: %s", url, e)
         return None
 
 
@@ -60,16 +80,16 @@ def _fetch_openf1_json(url: str) -> "list | dict | None":
 # FastF1
 # ---------------------------------------------------------------------------
 
-def fetch_fastf1_results(year: int, race_name: str) -> "list[dict] | None":
+def fetch_fastf1_results(year: int, race_name: str) -> list[DriverResult] | None:
     """Return the top-10 results for *race_name* from the FastF1 API.
 
-    Each entry is a slim dict ``{"abbr": "RUS", "name": "George Russell"}``.
+    Each entry is a :class:`~models.DriverResult` dict ``{"abbr": ..., "name": ...}``.
     Returns ``None`` when results are unavailable or FastF1 is not installed.
     """
     if not HAS_FASTF1:
         return None
 
-    print(f"\nFetching official FastF1 data for {race_name} ({year})...")
+    _log.info("Fetching official FastF1 data for %s (%s)...", race_name, year)
     try:
         cache_dir = os.path.abspath("fastf1_cache")
         os.makedirs(cache_dir, exist_ok=True)
@@ -82,10 +102,7 @@ def fetch_fastf1_results(year: int, race_name: str) -> "list[dict] | None":
             "Position" not in session.results.columns
             or session.results["Position"].isnull().all()
         ):
-            print(
-                "\n[!] Official race results are not yet available for this"
-                " session in FastF1."
-            )
+            _log.info("Official race results not yet available in FastF1 for %s.", race_name)
             return None
 
         results = (
@@ -93,7 +110,7 @@ def fetch_fastf1_results(year: int, race_name: str) -> "list[dict] | None":
             .sort_values(by="Position")
             .head(10)
         )
-        drivers = []
+        drivers: list[DriverResult] = []
         for _, row in results.iterrows():
             first = str(row.get("FirstName", "")).strip()
             last = str(row.get("LastName", "")).strip()
@@ -104,8 +121,8 @@ def fetch_fastf1_results(year: int, race_name: str) -> "list[dict] | None":
                 }
             )
         return drivers
-    except Exception as e:
-        print(f"Error fetching FastF1 data: {e}")
+    except Exception as e:  # noqa: BLE001 — FastF1 raises many undocumented types
+        _log.warning("Error fetching FastF1 data: %s", e)
         return None
 
 
@@ -113,7 +130,7 @@ def fetch_fastf1_results(year: int, race_name: str) -> "list[dict] | None":
 # OpenF1
 # ---------------------------------------------------------------------------
 
-def fetch_openf1_results(year: int, race_name: str) -> "list[dict] | None":
+def fetch_openf1_results(year: int, race_name: str) -> list[DriverResult] | None:
     """Return the top-10 results for *race_name* from the OpenF1 API.
 
     Follows the required endpoint sequence:
@@ -121,16 +138,16 @@ def fetch_openf1_results(year: int, race_name: str) -> "list[dict] | None":
 
     Returns ``None`` when results are unavailable.
     """
-    print(f"\nAttempting to fetch from OpenF1 API for {race_name} ({year})...")
+    _log.info("Attempting to fetch from OpenF1 API for %s (%s)...", race_name, year)
     try:
         # Step 1: resolve meeting key
         meetings = _fetch_openf1_json(
             f"https://api.openf1.org/v1/meetings?year={year}"
         )
-        if not meetings:
+        if not meetings or not isinstance(meetings, list):
             return None
 
-        target_meeting = None
+        target_meeting: dict[str, Any] | None = None
         for m in meetings:
             m_name = m.get("meeting_name", "").lower()
             if m_name in race_name.lower() or race_name.lower() in m_name:
@@ -147,7 +164,7 @@ def fetch_openf1_results(year: int, race_name: str) -> "list[dict] | None":
                     break
 
         if not target_meeting:
-            print(f"[!] Could not find meeting matching '{race_name}' in OpenF1.")
+            _log.warning("Could not find meeting matching '%s' in OpenF1.", race_name)
             return None
 
         meeting_key = target_meeting["meeting_key"]
@@ -158,17 +175,19 @@ def fetch_openf1_results(year: int, race_name: str) -> "list[dict] | None":
             f"?meeting_key={meeting_key}&session_type=Race"
         )
         if not sessions or (isinstance(sessions, dict) and "detail" in sessions):
-            print(
-                f"[!] Could not find a Race session for meeting"
-                f" {target_meeting.get('meeting_name')}."
+            _log.warning(
+                "Could not find a Race session for meeting %s.",
+                target_meeting.get("meeting_name"),
             )
             return None
 
-        target_session = sessions[0]
+        target_session = sessions[0]  # type: ignore[index]
         session_key = target_session["session_key"]
-        print(
-            f"Found OpenF1 session: {target_meeting.get('meeting_name')}"
-            f" - {target_session.get('session_name')} (Key: {session_key})"
+        _log.info(
+            "Found OpenF1 session: %s - %s (Key: %s)",
+            target_meeting.get("meeting_name"),
+            target_session.get("session_name"),
+            session_key,
         )
 
         # Step 3: fetch session results
@@ -177,10 +196,10 @@ def fetch_openf1_results(year: int, race_name: str) -> "list[dict] | None":
             f"?session_key={session_key}&position<=10"
         )
         if isinstance(res_data, dict) and "detail" in res_data:
-            print(f"[!] OpenF1 API Info: {res_data['detail']}")
+            _log.info("OpenF1 API info: %s", res_data["detail"])
             return None
         if not res_data:
-            print("[!] OpenF1 does not have session_results populated yet.")
+            _log.info("OpenF1 session_results not yet populated for %s.", race_name)
             return None
 
         sorted_results = sorted(res_data, key=lambda x: x["position"])
@@ -190,7 +209,7 @@ def fetch_openf1_results(year: int, race_name: str) -> "list[dict] | None":
             f"https://api.openf1.org/v1/drivers?meeting_key={meeting_key}"
         )
 
-        driver_map: dict[str, dict] = {}
+        driver_map: dict[str, dict[str, Any]] = {}
         if isinstance(drivers_data, list):
             for d in drivers_data:
                 d_num = str(d.get("driver_number", ""))
@@ -201,27 +220,35 @@ def fetch_openf1_results(year: int, race_name: str) -> "list[dict] | None":
                 ):
                     driver_map[d_num] = d
 
-        results = []
+        api_results: list[DriverResult] = []
         for res in sorted_results[:10]:
             driver_id = str(res["driver_number"])
             info = driver_map.get(driver_id, {})
             first = (info.get("first_name") or "").strip()
             last = (info.get("last_name") or "").strip()
             name = f"{first} {last}".strip() or str(driver_id)
-            results.append(
+            api_results.append(
                 {
                     "abbr": (info.get("name_acronym") or "").strip(),
                     "name": name,
                 }
             )
 
-        return results
-    except Exception as e:
-        print(f"OpenF1 fetching error: {e}")
+        return api_results
+    except (
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+        TimeoutError,
+        json.JSONDecodeError,
+        KeyError,
+        IndexError,
+        OSError,
+    ) as e:
+        _log.warning("OpenF1 fetching error: %s", e)
         return None
 
 
-def fetch_results(year: int, race_name: str) -> "list[dict] | None":
+def fetch_results(year: int, race_name: str) -> list[DriverResult] | None:
     """Try FastF1 first, fall back to OpenF1.  Returns ``None`` if both fail."""
     result = fetch_fastf1_results(year, race_name) if HAS_FASTF1 else None
     return result or fetch_openf1_results(year, race_name)
@@ -232,8 +259,8 @@ def fetch_results(year: int, race_name: str) -> "list[dict] | None":
 # ---------------------------------------------------------------------------
 
 def get_schedule_updates(
-    existing_races: list[dict],
-) -> "tuple[list[dict], list[tuple[dict, str]]]":
+    existing_races: list[RaceData],
+) -> tuple[list[RaceData], list[tuple[RaceData, str]]]:
     """Fetch the current-season schedule and diff it against *existing_races*.
 
     Returns ``(new_races, date_updates)`` where:
@@ -254,8 +281,8 @@ def get_schedule_updates(
     schedule = fastf1.get_event_schedule(year)
     events = schedule[schedule["EventFormat"] != "testing"]
 
-    new_races: list[dict] = []
-    date_updates: list[tuple[dict, str]] = []
+    new_races: list[RaceData] = []
+    date_updates: list[tuple[RaceData, str]] = []
 
     for _, row in events.iterrows():
         race_name = row.get("EventName")

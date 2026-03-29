@@ -7,20 +7,22 @@ requests live here.
 
 from __future__ import annotations
 
+__all__ = ["main_menu"]
+
 import datetime
 import os
 import re
 import sys
+from collections.abc import Callable
+from typing import TypeVar
 
 from .api import HAS_FASTF1, fetch_results, get_schedule_updates
 from .drivers import ROSTER
-from .scoring import (
-    calculate_player_points_for_race,
-    calculate_season_standings,
-    score_position,
-)
+from .models import DriverInfo, DriverResult, GameData, RaceData
+from .scoring import calculate_player_points_for_race, calculate_season_standings, score_position
 from .storage import load_data, save_data
 
+_T = TypeVar("_T")
 
 # ---------------------------------------------------------------------------
 # Layout constants & helpers
@@ -68,7 +70,7 @@ def _fmt_date(date_str: str) -> str:
         return date_str
 
 
-def _season_context(data: dict) -> str:
+def _season_context(data: GameData) -> str:
     n = len(data["players"])
     done = sum(1 for r in data["races"] if r.get("actual_results"))
     total = len(data["races"])
@@ -139,7 +141,11 @@ def get_input_list(prompt: str, min_items: int = 10, max_items: int = 10) -> lis
     return parse_raw_input_lines(lines, max_items)
 
 
-def select_item(items: list, item_name: str, display_func=str):
+def select_item(
+    items: list[_T],
+    item_name: str,
+    display_func: Callable[[_T], str] = str,
+) -> _T | None:
     """Print a numbered list and return the chosen item, or None on bad input."""
     if not items:
         input(f"\n  No {item_name}s exist. Add one first. Press Enter...")
@@ -163,7 +169,7 @@ def select_item(items: list, item_name: str, display_func=str):
 # Auto-update on startup
 # ---------------------------------------------------------------------------
 
-def auto_update_past_races(data: dict) -> None:
+def auto_update_past_races(data: GameData) -> None:
     today = datetime.datetime.now().date().isoformat()
     updated = False
     first_update = True
@@ -182,7 +188,7 @@ def auto_update_past_races(data: dict) -> None:
             fetched = fetch_results(year, race["name"])
 
             if fetched:
-                race["actual_results"] = fetched
+                race["actual_results"] = fetched  # type: ignore[typeddict-item]
                 updated = True
                 print(f"  ✓  Results saved for {race['name']}\n")
             else:
@@ -245,7 +251,7 @@ def main_menu() -> None:
 # Player management
 # ---------------------------------------------------------------------------
 
-def manage_players(data: dict) -> None:
+def manage_players(data: GameData) -> None:
     while True:
         clear_screen()
         _header("Manage Players")
@@ -292,7 +298,7 @@ def manage_players(data: dict) -> None:
 # Race management
 # ---------------------------------------------------------------------------
 
-def manage_races(data: dict) -> None:
+def manage_races(data: GameData) -> None:
     while True:
         clear_screen()
         _header("Manage Races")
@@ -353,7 +359,7 @@ def manage_races(data: dict) -> None:
             break
 
 
-def _auto_populate_schedule(data: dict) -> None:
+def _auto_populate_schedule(data: GameData) -> None:
     """CLI wrapper: call api.get_schedule_updates, apply changes, save."""
     if not HAS_FASTF1:
         input(
@@ -394,7 +400,7 @@ def _auto_populate_schedule(data: dict) -> None:
 # Predictions
 # ---------------------------------------------------------------------------
 
-def _render_driver_list(roster: list[dict], picked: list[dict]) -> None:
+def _render_driver_list(roster: list[DriverInfo], picked: list[DriverInfo]) -> None:
     """Print the numbered driver roster, marking already-picked drivers."""
     current_team = ""
     for i, d in enumerate(roster):
@@ -412,12 +418,12 @@ def _render_driver_list(roster: list[dict], picked: list[dict]) -> None:
             print(f"  [{i+1:>2}]  {d['abbr']}  {d['name']:<22}  {d['team']}")
 
 
-def _build_prediction(race_name: str, player: str) -> "list[str] | None":
+def _build_prediction(race_name: str, player: str) -> list[str] | None:
     """Interactive driver-select loop.  Returns the prediction as a list of
     canonical driver keys, or None if the user cancels.
     """
     roster = ROSTER  # module-level list; can be narrowed in future
-    picked: list[dict] = []
+    picked: list[DriverInfo] = []
 
     while True:
         # --- Selection loop: keep picking until 10 chosen or user exits ---
@@ -504,7 +510,7 @@ def _build_prediction(race_name: str, player: str) -> "list[str] | None":
         return None
 
 
-def enter_predictions(data: dict) -> None:
+def enter_predictions(data: GameData) -> None:
     clear_screen()
     _header("Enter Predictions")
 
@@ -523,7 +529,7 @@ def enter_predictions(data: dict) -> None:
 
     max_name = max(len(r["name"]) for r in upcoming)
 
-    def display_upcoming(r: dict) -> str:
+    def display_upcoming(r: RaceData) -> str:
         date_part = _fmt_date(r.get("date", ""))
         tag = "← next" if r is upcoming[0] else ""
         return f"{date_part}   {r['name']:<{max_name}}   {tag}"
@@ -555,7 +561,7 @@ def enter_predictions(data: dict) -> None:
 # Results entry
 # ---------------------------------------------------------------------------
 
-def enter_results(data: dict) -> None:
+def enter_results(data: GameData) -> None:
     clear_screen()
     _header("Enter Race Results")
 
@@ -569,7 +575,7 @@ def enter_results(data: dict) -> None:
 
     max_name = max(len(r["name"]) for r in past_races)
 
-    def display_past(r: dict) -> str:
+    def display_past(r: RaceData) -> str:
         date_part = _fmt_date(r.get("date", ""))
         tag = "(logged)" if r.get("actual_results") else "(needed)"
         return f"{date_part}   {r['name']:<{max_name}}   {tag}"
@@ -593,7 +599,7 @@ def enter_results(data: dict) -> None:
                 for i, d in enumerate(fetched):
                     print(f"    {i+1:>2}.  {d['name']}")
                 if input("\n  Save these results? (y/n): ").strip().lower() == "y":
-                    race["actual_results"] = fetched
+                    race["actual_results"] = fetched  # type: ignore[typeddict-item]
                     save_data(data)
                     input(f"\n  ✓  Results for {race['name']} saved. Press Enter...")
                     return
@@ -606,7 +612,7 @@ def enter_results(data: dict) -> None:
     print("  The system ignores case — use any consistent name format.")
 
     actual = get_input_list("Top 10:", max_items=10)
-    race["actual_results"] = actual
+    race["actual_results"] = actual  # type: ignore[typeddict-item]
     save_data(data)
     input(f"\n  ✓  Results for {race['name']} saved. Press Enter...")
 
@@ -615,7 +621,7 @@ def enter_results(data: dict) -> None:
 # Views
 # ---------------------------------------------------------------------------
 
-def _act_display(actual_entry) -> str:
+def _act_display(actual_entry: DriverResult | str | None) -> str:
     """Return a display string for one actual-result entry."""
     if actual_entry is None:
         return "(none)"
@@ -624,7 +630,7 @@ def _act_display(actual_entry) -> str:
     return str(actual_entry)
 
 
-def view_race_points(data: dict) -> None:
+def view_race_points(data: GameData) -> None:
     clear_screen()
     _header("View Race Points")
 
@@ -633,7 +639,7 @@ def view_race_points(data: dict) -> None:
 
     max_name = max((len(r["name"]) for r in sorted_races), default=0)
 
-    def display_race(r: dict) -> str:
+    def display_race(r: RaceData) -> str:
         date_part = _fmt_date(r.get("date", ""))
         has_results = bool(r.get("actual_results"))
         tag = "(results logged)" if has_results else "(no results yet)"
@@ -707,7 +713,7 @@ def view_race_points(data: dict) -> None:
     input("  Press Enter to continue...")
 
 
-def view_standings(data: dict) -> None:
+def view_standings(data: GameData) -> None:
     clear_screen()
     scores, races_counted = calculate_season_standings(data)
     sorted_players = sorted(scores.items(), key=lambda x: x[1])

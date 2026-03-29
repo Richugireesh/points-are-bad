@@ -1,6 +1,6 @@
 """Core game-scoring logic.
 
-Rules (from AGENT_INSTRUCTIONS.md):
+Rules:
   - Perfect match at a position  ->  0 points
   - Mismatch at a position       -> +1 point
   - Missing prediction for a race -> +10 points (applied by the caller)
@@ -9,6 +9,27 @@ This module has no I/O or external-API dependencies and is fully unit-testable.
 """
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING, Union
+
+if TYPE_CHECKING:
+    from .models import DriverResult, GameData
+
+    # Private type alias used in function signatures below.  Lives entirely
+    # inside TYPE_CHECKING because:
+    #   1. All annotations are lazy strings (from __future__ import annotations),
+    #      so _ActualEntry is never evaluated at runtime.
+    #   2. Using DriverResult (the concrete TypedDict) keeps mypy happy with
+    #      callers that pass list[DriverResult | str] from models.RaceData.
+    _ActualEntry = Union[DriverResult, str]
+
+__all__ = [
+    "ALIASES",
+    "calculate_player_points_for_race",
+    "calculate_season_standings",
+    "calculate_str_equality",
+    "score_position",
+]
 
 # ---------------------------------------------------------------------------
 # Driver alias table
@@ -63,13 +84,14 @@ def _normalize(s: str) -> str:
     return ALIASES.get(s, s)
 
 
-def calculate_str_equality(prediction: str, actual: "str | dict") -> bool:
-    """Return True if *prediction* matches *actual*.
+def calculate_str_equality(prediction: str, actual: _ActualEntry) -> bool:
+    """Return ``True`` if *prediction* matches *actual*.
 
     *actual* may be:
       - a plain string  (manual entry)
-      - a dict with keys BroadcastName / FirstName / LastName / Abbreviation
-        (FastF1 / OpenF1 result)
+      - a dict with keys ``BroadcastName`` / ``FirstName`` / ``LastName`` /
+        ``Abbreviation`` (FastF1 / OpenF1 result)
+      - a dict with keys ``abbr`` / ``name`` (stored :class:`~models.DriverResult`)
 
     Matching is case-insensitive and alias-aware.  A substring match on
     normalised values is accepted (e.g. "perez" matches "S PEREZ").
@@ -80,16 +102,19 @@ def calculate_str_equality(prediction: str, actual: "str | dict") -> bool:
         for val in actual.values():
             if not val:
                 continue
-            v = _normalize(val)
+            v = _normalize(str(val))  # values() is object-typed; str() is a no-op for str values
             if p == v or (v and p in v):
                 return True
         return False
 
     b = _normalize(actual)
-    return p == b or (b and p in b)
+    return p == b or bool(b and p in b)
 
 
-def score_position(pred: "str | None", actual_entry: "str | dict | None") -> int:
+def score_position(
+    pred: str | None,
+    actual_entry: _ActualEntry | None,
+) -> int:
     """Return 0 (match) or 1 (mismatch) for one finishing position.
 
     Both arguments being ``None`` means neither player nor results have an
@@ -104,7 +129,10 @@ def score_position(pred: "str | None", actual_entry: "str | dict | None") -> int
     return 0 if calculate_str_equality(pred, actual_entry) else 1
 
 
-def calculate_player_points_for_race(prediction: list, actual: list) -> int:
+def calculate_player_points_for_race(
+    prediction: list[str],
+    actual: list[_ActualEntry],
+) -> int:
     """Total points for one player in one race.
 
     Iterates over all 10 positions (or however many exist in either list),
@@ -125,7 +153,7 @@ def calculate_player_points_for_race(prediction: list, actual: list) -> int:
     )
 
 
-def calculate_season_standings(data: dict) -> tuple[dict[str, int], int]:
+def calculate_season_standings(data: GameData) -> tuple[dict[str, int], int]:
     """Return ``(player -> total_points, races_with_results_count)``.
 
     Applies the +10 missing-prediction penalty for every race that has
