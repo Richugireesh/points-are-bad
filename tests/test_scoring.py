@@ -10,8 +10,6 @@ code review:
   - calculate_season_standings with missing predictions (+10 penalty)
 """
 
-import pytest
-
 from points_are_bad.scoring import (
     ALIASES,
     _normalize,
@@ -20,7 +18,6 @@ from points_are_bad.scoring import (
     calculate_str_equality,
     score_position,
 )
-
 
 # ---------------------------------------------------------------------------
 # _normalize
@@ -122,7 +119,7 @@ class TestCalculateStrEqualityDict:
         assert not calculate_str_equality("hamilton", self.VERSTAPPEN)
 
     def test_empty_values_in_dict_ignored(self):
-        sparse = {"BroadcastName": "", "FirstName": None, "LastName": "Verstappen", "Abbreviation": ""}
+        sparse = {"BroadcastName": "", "FirstName": None, "LastName": "Verstappen", "Abbreviation": ""}  # noqa: E501
         assert calculate_str_equality("verstappen", sparse)
 
     def test_none_sentinel_does_not_match_dict(self):

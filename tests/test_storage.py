@@ -6,6 +6,7 @@ import os
 import pytest
 
 import points_are_bad.storage as storage_module
+from points_are_bad.exceptions import StorageError
 from points_are_bad.storage import load_data, save_data
 
 
@@ -101,3 +102,21 @@ class TestRoundTrip:
         }
         save_data(original)
         assert load_data() == original
+
+
+# ---------------------------------------------------------------------------
+# Error handling
+# ---------------------------------------------------------------------------
+
+class TestStorageErrors:
+    def test_load_raises_storage_error_on_corrupt_json(self, isolated_data_file):
+        with open(isolated_data_file, "w") as f:
+            f.write("{ not valid json }")
+        with pytest.raises(StorageError, match="Could not read"):
+            load_data()
+
+    def test_save_raises_storage_error_on_bad_path(self, monkeypatch, tmp_path):
+        bad_path = str(tmp_path / "no_such_dir" / "data.json")
+        monkeypatch.setattr(storage_module, "DATA_FILE", bad_path)
+        with pytest.raises(StorageError, match="Could not write"):
+            save_data({"players": [], "races": []})
