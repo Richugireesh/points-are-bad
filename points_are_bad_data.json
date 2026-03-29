@@ -1,322 +1,330 @@
 {
-    "players": [
-        "richu",
-        "sam",
-        "danny"
-    ],
-    "races": [
+  "players": ["richu", "sam", "danny"],
+  "races": [
+    {
+      "name": "Australian Grand Prix",
+      "actual_results": [
         {
-            "name": "Australian Grand Prix",
-            "actual_results": [
-                {
-                    "abbr": "RUS",
-                    "name": "George Russell"
-                },
-                {
-                    "abbr": "ANT",
-                    "name": "Kimi Antonelli"
-                },
-                {
-                    "abbr": "LEC",
-                    "name": "Charles Leclerc"
-                },
-                {
-                    "abbr": "HAM",
-                    "name": "Lewis Hamilton"
-                },
-                {
-                    "abbr": "NOR",
-                    "name": "Lando Norris"
-                },
-                {
-                    "abbr": "VER",
-                    "name": "Max Verstappen"
-                },
-                {
-                    "abbr": "BEA",
-                    "name": "Oliver Bearman"
-                },
-                {
-                    "abbr": "LIN",
-                    "name": "Arvid Lindblad"
-                },
-                {
-                    "abbr": "BOR",
-                    "name": "Gabriel Bortoleto"
-                },
-                {
-                    "abbr": "GAS",
-                    "name": "Pierre Gasly"
-                }
-            ],
-            "predictions": {
-                "richu": [
-                    "russell",
-                    "antonelli",
-                    "leclerc",
-                    "piastri",
-                    "verstappen",
-                    "hadjar",
-                    "hamilton",
-                    "norris",
-                    "lindblad",
-                    "bortoleto"
-                ],
-                "sam": [
-                    "russell",
-                    "leclerc",
-                    "piastri",
-                    "hadjar",
-                    "hamilton",
-                    "antonelli",
-                    "norris",
-                    "verstappen",
-                    "lindblad",
-                    "bortoleto"
-                ],
-                "danny": [
-                    "piastri",
-                    "russell",
-                    "hadjar",
-                    "leclerc",
-                    "verstappen",
-                    "antonelli",
-                    "norris",
-                    "hamilton",
-                    "alonso",
-                    "perez"
-                ]
-            },
-            "date": "2026-03-08"
+          "abbr": "RUS",
+          "name": "George Russell"
         },
         {
-            "name": "Chinese Grand Prix",
-            "actual_results": [
-                {
-                    "abbr": "ANT",
-                    "name": "Kimi Antonelli"
-                },
-                {
-                    "abbr": "RUS",
-                    "name": "George Russell"
-                },
-                {
-                    "abbr": "HAM",
-                    "name": "Lewis Hamilton"
-                },
-                {
-                    "abbr": "LEC",
-                    "name": "Charles Leclerc"
-                },
-                {
-                    "abbr": "BEA",
-                    "name": "Oliver Bearman"
-                },
-                {
-                    "abbr": "GAS",
-                    "name": "Pierre Gasly"
-                },
-                {
-                    "abbr": "LAW",
-                    "name": "Liam Lawson"
-                },
-                {
-                    "abbr": "HAD",
-                    "name": "Isack Hadjar"
-                },
-                {
-                    "abbr": "SAI",
-                    "name": "Carlos Sainz"
-                },
-                {
-                    "abbr": "COL",
-                    "name": "Franco Colapinto"
-                }
-            ],
-            "predictions": {
-                "richu": [
-                    "russell",
-                    "antonelli",
-                    "leclerc",
-                    "hamilton",
-                    "norris",
-                    "piastri",
-                    "verstappen",
-                    "gasly",
-                    "bearman",
-                    "lawson"
-                ],
-                "danny": [
-                    "russell",
-                    "leclerc",
-                    "antonelli",
-                    "hamilton",
-                    "verstappen",
-                    "norris",
-                    "piastri",
-                    "hadjar",
-                    "bearman",
-                    "gasly"
-                ],
-                "sam": [
-                    "russell",
-                    "hamilton",
-                    "antonelli",
-                    "leclerc",
-                    "piastri",
-                    "verstappen",
-                    "hadjar",
-                    "bearman",
-                    "gasly",
-                    "lawson"
-                ]
-            },
-            "date": "2026-03-15"
+          "abbr": "ANT",
+          "name": "Kimi Antonelli"
         },
         {
-            "name": "Japanese Grand Prix",
-            "actual_results": [],
-            "predictions": {
-                "richu": [
-                    "antonelli",
-                    "russell",
-                    "leclerc",
-                    "hamilton",
-                    "piastri",
-                    "verstappen",
-                    "norris",
-                    "lindblad",
-                    "bortoleto",
-                    "gasly"
-                ]
-            },
-            "date": "2026-03-29"
+          "abbr": "LEC",
+          "name": "Charles Leclerc"
         },
         {
-            "name": "Bahrain Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-04-12"
+          "abbr": "HAM",
+          "name": "Lewis Hamilton"
         },
         {
-            "name": "Saudi Arabian Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-04-19"
+          "abbr": "NOR",
+          "name": "Lando Norris"
         },
         {
-            "name": "Miami Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-05-03"
+          "abbr": "VER",
+          "name": "Max Verstappen"
         },
         {
-            "name": "Canadian Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-05-24"
+          "abbr": "BEA",
+          "name": "Oliver Bearman"
         },
         {
-            "name": "Monaco Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-06-07"
+          "abbr": "LIN",
+          "name": "Arvid Lindblad"
         },
         {
-            "name": "Barcelona Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-06-14"
+          "abbr": "BOR",
+          "name": "Gabriel Bortoleto"
         },
         {
-            "name": "Austrian Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-06-28"
-        },
-        {
-            "name": "British Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-07-05"
-        },
-        {
-            "name": "Belgian Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-07-19"
-        },
-        {
-            "name": "Hungarian Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-07-26"
-        },
-        {
-            "name": "Dutch Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-08-23"
-        },
-        {
-            "name": "Italian Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-09-06"
-        },
-        {
-            "name": "Spanish Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-09-13"
-        },
-        {
-            "name": "Azerbaijan Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-09-26"
-        },
-        {
-            "name": "Singapore Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-10-11"
-        },
-        {
-            "name": "United States Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-10-25"
-        },
-        {
-            "name": "Mexico City Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-11-01"
-        },
-        {
-            "name": "S\u00e3o Paulo Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-11-08"
-        },
-        {
-            "name": "Las Vegas Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-11-21"
-        },
-        {
-            "name": "Qatar Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-11-29"
-        },
-        {
-            "name": "Abu Dhabi Grand Prix",
-            "actual_results": [],
-            "predictions": {},
-            "date": "2026-12-06"
+          "abbr": "GAS",
+          "name": "Pierre Gasly"
         }
-    ]
+      ],
+      "predictions": {
+        "richu": [
+          "russell",
+          "antonelli",
+          "leclerc",
+          "piastri",
+          "verstappen",
+          "hadjar",
+          "hamilton",
+          "norris",
+          "lindblad",
+          "bortoleto"
+        ],
+        "sam": [
+          "russell",
+          "leclerc",
+          "piastri",
+          "hadjar",
+          "hamilton",
+          "antonelli",
+          "norris",
+          "verstappen",
+          "lindblad",
+          "bortoleto"
+        ],
+        "danny": [
+          "piastri",
+          "russell",
+          "hadjar",
+          "leclerc",
+          "verstappen",
+          "antonelli",
+          "norris",
+          "hamilton",
+          "alonso",
+          "perez"
+        ]
+      },
+      "date": "2026-03-08"
+    },
+    {
+      "name": "Chinese Grand Prix",
+      "actual_results": [
+        {
+          "abbr": "ANT",
+          "name": "Kimi Antonelli"
+        },
+        {
+          "abbr": "RUS",
+          "name": "George Russell"
+        },
+        {
+          "abbr": "HAM",
+          "name": "Lewis Hamilton"
+        },
+        {
+          "abbr": "LEC",
+          "name": "Charles Leclerc"
+        },
+        {
+          "abbr": "BEA",
+          "name": "Oliver Bearman"
+        },
+        {
+          "abbr": "GAS",
+          "name": "Pierre Gasly"
+        },
+        {
+          "abbr": "LAW",
+          "name": "Liam Lawson"
+        },
+        {
+          "abbr": "HAD",
+          "name": "Isack Hadjar"
+        },
+        {
+          "abbr": "SAI",
+          "name": "Carlos Sainz"
+        },
+        {
+          "abbr": "COL",
+          "name": "Franco Colapinto"
+        }
+      ],
+      "predictions": {
+        "richu": [
+          "russell",
+          "antonelli",
+          "leclerc",
+          "hamilton",
+          "norris",
+          "piastri",
+          "verstappen",
+          "gasly",
+          "bearman",
+          "lawson"
+        ],
+        "danny": [
+          "russell",
+          "leclerc",
+          "antonelli",
+          "hamilton",
+          "verstappen",
+          "norris",
+          "piastri",
+          "hadjar",
+          "bearman",
+          "gasly"
+        ],
+        "sam": [
+          "russell",
+          "hamilton",
+          "antonelli",
+          "leclerc",
+          "piastri",
+          "verstappen",
+          "hadjar",
+          "bearman",
+          "gasly",
+          "lawson"
+        ]
+      },
+      "date": "2026-03-15"
+    },
+    {
+      "name": "Japanese Grand Prix",
+      "actual_results": [],
+      "predictions": {
+        "richu": [
+          "antonelli",
+          "russell",
+          "leclerc",
+          "hamilton",
+          "piastri",
+          "verstappen",
+          "norris",
+          "lindblad",
+          "bortoleto",
+          "gasly"
+        ],
+        "sam": [
+          "russell",
+          "antonelli",
+          "leclerc",
+          "piastri",
+          "hamilton",
+          "norris",
+          "verstappen",
+          "gasly",
+          "hadjar",
+          "bortoleto"
+        ]
+      },
+      "date": "2026-03-29"
+    },
+    {
+      "name": "Bahrain Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-04-12"
+    },
+    {
+      "name": "Saudi Arabian Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-04-19"
+    },
+    {
+      "name": "Miami Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-05-03"
+    },
+    {
+      "name": "Canadian Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-05-24"
+    },
+    {
+      "name": "Monaco Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-06-07"
+    },
+    {
+      "name": "Barcelona Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-06-14"
+    },
+    {
+      "name": "Austrian Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-06-28"
+    },
+    {
+      "name": "British Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-07-05"
+    },
+    {
+      "name": "Belgian Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-07-19"
+    },
+    {
+      "name": "Hungarian Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-07-26"
+    },
+    {
+      "name": "Dutch Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-08-23"
+    },
+    {
+      "name": "Italian Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-09-06"
+    },
+    {
+      "name": "Spanish Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-09-13"
+    },
+    {
+      "name": "Azerbaijan Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-09-26"
+    },
+    {
+      "name": "Singapore Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-10-11"
+    },
+    {
+      "name": "United States Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-10-25"
+    },
+    {
+      "name": "Mexico City Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-11-01"
+    },
+    {
+      "name": "S\u00e3o Paulo Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-11-08"
+    },
+    {
+      "name": "Las Vegas Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-11-21"
+    },
+    {
+      "name": "Qatar Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-11-29"
+    },
+    {
+      "name": "Abu Dhabi Grand Prix",
+      "actual_results": [],
+      "predictions": {},
+      "date": "2026-12-06"
+    }
+  ]
 }
