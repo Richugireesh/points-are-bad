@@ -1,6 +1,6 @@
-# Points Are Bad - F1 Prediction Game
+# Points Are Bad — F1 Prediction Game
 
-A Python CLI for playing "Points are Bad" — a Formula 1 prediction game among friends where players predict the Top 10 finishers of every Grand Prix. The objective is to accumulate the *least* amount of points across the season.
+A Python CLI for playing "Points are Bad" — a Formula 1 prediction game among friends where players predict the Top 10 finishers of every Grand Prix. The objective is to accumulate the *fewest* points across the season.
 
 ## Rules
 
@@ -9,61 +9,78 @@ A Python CLI for playing "Points are Bad" — a Formula 1 prediction game among 
 - A missing prediction for a race scores a flat **+10 point penalty**.
 - The player with the fewest points at the end of the season wins.
 
-## Installation
+## Requirements
 
-Requires Python 3.9+ and [uv](https://github.com/astral-sh/uv).
+- Python 3.9+
+- [uv](https://github.com/astral-sh/uv)
+
+## Installation
 
 ```bash
 git clone <repo>
 cd points-are-bad
 uv venv
-uv pip install -e .[dev]   # omit [dev] to skip pytest
+uv pip install -e .[dev]   # omit [dev] to skip test/lint tools
 ```
 
 ## Running
 
 ```bash
-source .venv/bin/activate
-points-are-bad
-```
-
-Or without activating the virtual environment:
-
-```bash
 .venv/bin/points-are-bad
 ```
 
-Data is stored in `points_are_bad_data.json` in the working directory (auto-created on first run).
+Data is auto-created at `points_are_bad_data.json` in the working directory. Override with `POINTS_DATA_FILE=/path/to/file.json`.
 
 ## Testing
 
 ```bash
-source .venv/bin/activate
-pytest tests/ -v
+.venv/bin/pytest tests/ -v                    # run all tests
+.venv/bin/pytest tests/test_scoring.py -v     # single module
+.venv/bin/pytest tests/ --cov=points_are_bad  # with coverage
 ```
 
-## Features
-
-- **Player Management**: Add or remove players from the game.
-- **Race Schedule**: Fetches the current-season schedule from FastF1 and syncs it to local data.
-- **Driver-Select UI**: Interactive picker grouped by team — scroll through the 2026 grid (22 drivers, 11 teams) and select your Top 10. Includes a confirmation screen before saving.
-- **Automated Results Fetching**:
-  1. Attempts **FastF1** for official race classification.
-  2. Falls back to **OpenF1** if FastF1 results are not yet published.
-  3. Falls back to manual entry if both APIs are unavailable.
-- **Points Breakdown**: Per-position scoring breakdown for any race, showing all players.
-- **Season Standings**: Live standings table based on `points_are_bad_data.json`.
-
-## Package Structure
+## Architecture
 
 ```
 src/points_are_bad/
-    cli.py        # menus, UI, all user interaction
-    scoring.py    # points calculation and alias resolution
-    api.py        # FastF1 + OpenF1 data fetching
-    storage.py    # load/save points_are_bad_data.json
-    drivers.py    # 2026 F1 roster (22 drivers, 11 teams)
+  cli.py        Interactive menus, input/output, orchestration
+  scoring.py    Pure scoring logic; no I/O (fully unit-testable)
+  api.py        FastF1 → OpenF1 → manual fallback chain for results
+  storage.py    JSON load/save (points_are_bad_data.json)
+  drivers.py    Hardcoded 2026 roster (22 drivers, 11 teams)
+  models.py     TypedDicts: GameData, RaceData, DriverResult, DriverInfo
+  exceptions.py PointsAreBadError hierarchy (ApiError, StorageError, …)
+
 tests/
-    test_scoring.py
-    test_storage.py
+  conftest.py         Shared fixtures (sample_data, no_clear_screen)
+  test_scoring.py     56 tests — 100% coverage of scoring.py
+  test_storage.py     Round-trip, error-path tests — 100% storage.py
+  test_drivers.py     Roster integrity, lookup helpers
+  test_cli_utils.py   Pure CLI helpers, mocked select_item
+  test_cli_menus.py   Interactive menus with mocked input()
+  test_api.py         urllib + fastf1 mocked, all fallback paths
 ```
+
+### Key data flow
+
+1. `cli.py:main_menu()` loads `GameData` from JSON via `storage.load_data()`.
+2. On startup it calls `auto_update_past_races()` which fetches missing results via `api.fetch_results()`.
+3. Scoring is always delegated to `scoring.calculate_player_points_for_race()` — the single source of truth for per-race points.
+4. All writes go through `storage.save_data()`.
+
+### API quirk — FastF1 monkey-patches `requests`
+
+FastF1 aggressively caches via `requests`. All OpenF1 calls inside `api.py` therefore use `urllib.request` directly to avoid stale cached responses. Do **not** introduce `requests` calls in `api.py`.
+
+### OpenF1 endpoint order
+
+Must call in sequence: `/meetings` → `/sessions` → `/session_result` → `/drivers`. Use `meeting_key` (not `session_key`) when fetching drivers to avoid null `broadcast_name` values.
+
+## Features
+
+- **Player management** — add/remove players at any time.
+- **Race schedule** — auto-populate from FastF1; dates are kept in sync.
+- **Driver-select UI** — interactive picker grouped by team, with a confirmation screen.
+- **Automated result fetching** — FastF1 (official) → OpenF1 (community) → manual entry.
+- **Points breakdown** — per-position view for any race across all players.
+- **Season standings** — live table sorted by fewest points.
