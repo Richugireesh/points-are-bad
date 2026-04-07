@@ -183,20 +183,54 @@ class TestManageRaces:
         assert "Monaco GP" in names
 
     def test_remove_race(self, monkeypatch, sample_data):
-        responses = iter(["2", "Bahrain Grand Prix", "", "4"])
+        # "2" → Remove Race, "1" → pick Bahrain (first in list), "y" → confirm,
+        # "" → Press Enter, "4" → Back
+        responses = iter(["2", "1", "y", "", "4"])
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         with patch.object(cli_mod, "save_data"):
             manage_races(sample_data)
         names = [r["name"] for r in sample_data["races"]]
         assert "Bahrain Grand Prix" not in names
 
-    def test_remove_nonexistent_race(self, monkeypatch, sample_data):
+    def test_remove_race_cancelled_leaves_list_unchanged(self, monkeypatch, sample_data):
         original_len = len(sample_data["races"])
-        responses = iter(["2", "Nonexistent GP", "", "4"])
+        # "2" → Remove Race, "1" → pick Bahrain, "n" → cancel, "" → Press Enter, "4" → Back
+        responses = iter(["2", "1", "n", "", "4"])
+        monkeypatch.setattr("builtins.input", lambda _: next(responses))
+        with patch.object(cli_mod, "save_data") as mock_save:
+            manage_races(sample_data)
+        mock_save.assert_not_called()
+        assert len(sample_data["races"]) == original_len
+
+    def test_add_race_invalid_date_rejected(self, monkeypatch, capsys, sample_data):
+        """Invalid date format is rejected and the race is not added."""
+        original_count = len(sample_data["races"])
+        # "1" → Add Race, "Test GP" → name, "banana" → bad date,
+        # "" → Press Enter (error), "4" → Back
+        responses = iter(["1", "Test GP", "banana", "", "4"])
+        monkeypatch.setattr("builtins.input", lambda _: next(responses))
+        with patch.object(cli_mod, "save_data") as mock_save:
+            manage_races(sample_data)
+        mock_save.assert_not_called()
+        assert len(sample_data["races"]) == original_count
+
+    def test_add_race_blank_date_accepted(self, monkeypatch, sample_data):
+        """A blank date is valid — the race is added without a date."""
+        responses = iter(["1", "Test GP", "", "", "4"])
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         with patch.object(cli_mod, "save_data"):
             manage_races(sample_data)
-        assert len(sample_data["races"]) == original_len
+        race = next(r for r in sample_data["races"] if r["name"] == "Test GP")
+        assert race["date"] == ""
+
+    def test_add_race_sorted_by_date(self, monkeypatch, sample_data):
+        """Races are sorted by date after adding a new one."""
+        responses = iter(["1", "Early GP", "2020-01-01", "", "4"])
+        monkeypatch.setattr("builtins.input", lambda _: next(responses))
+        with patch.object(cli_mod, "save_data"):
+            manage_races(sample_data)
+        dates = [r.get("date", "") for r in sample_data["races"] if r.get("date")]
+        assert dates == sorted(dates)
 
     def test_auto_populate_no_fastf1(self, monkeypatch, sample_data):
         monkeypatch.setattr(cli_mod, "HAS_FASTF1", False)
@@ -286,6 +320,62 @@ class TestEnterPredictions:
         responses = iter(["", ""])
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         enter_predictions(sample_data)  # should return gracefully
+
+    def test_edit_existing_prediction_cancel_does_not_save(self, monkeypatch, sample_data):
+        """When a player already has a prediction and chooses 'c', nothing is saved."""
+        existing = [
+            "verstappen", "norris", "leclerc", "hamilton", "russell",
+            "piastri", "antonelli", "gasly", "hadjar", "lawson",
+        ]
+        sample_data["races"][1]["predictions"]["Alice"] = existing[:]
+
+        responses = iter([
+            "1",  # select Australian GP (the only upcoming race)
+            "1",  # select Alice (who already has a prediction)
+            "c",  # cancel edit
+        ])
+        monkeypatch.setattr("builtins.input", lambda _: next(responses))
+        with patch.object(cli_mod, "save_data") as mock_save:
+            enter_predictions(sample_data)
+        mock_save.assert_not_called()
+        # Prediction unchanged
+        assert sample_data["races"][1]["predictions"]["Alice"] == existing
+
+    def test_edit_existing_prediction_saves_updated(self, monkeypatch, sample_data):
+        """When a player edits their prediction, the new one is stored."""
+        old_pred = [
+            "verstappen", "norris", "leclerc", "hamilton", "russell",
+            "piastri", "antonelli", "gasly", "hadjar", "lawson",
+        ]
+        new_pred = list(reversed(old_pred))
+        sample_data["races"][1]["predictions"]["Alice"] = old_pred[:]
+
+        responses = iter([
+            "1",  # select Australian GP
+            "1",  # select Alice
+            "e",  # edit
+            "",   # Press Enter after save confirmation
+        ])
+        monkeypatch.setattr("builtins.input", lambda _: next(responses))
+        # Bypass the full picker UI — return a canned new prediction
+        monkeypatch.setattr(cli_mod, "_build_prediction", lambda *a, **kw: new_pred)
+        with patch.object(cli_mod, "save_data") as mock_save:
+            enter_predictions(sample_data)
+        mock_save.assert_called_once()
+        assert sample_data["races"][1]["predictions"]["Alice"] == new_pred
+
+    def test_build_prediction_prefill_pre_populates_picks(self, monkeypatch):
+        """_build_prediction with prefill seeds the picker with existing drivers."""
+        from points_are_bad.cli import _build_prediction
+
+        prefill = ["verstappen", "norris"]
+        # Picker starts at P3 (2 already filled); "0" → finish early → "y" confirm
+        responses = iter(["0", "y", "y"])
+        monkeypatch.setattr("builtins.input", lambda _: next(responses))
+        result = _build_prediction("Test Race", "alice", prefill=prefill)
+        # First two slots must be the pre-filled drivers in order
+        assert result is not None
+        assert result[:2] == prefill
 
 
 # ---------------------------------------------------------------------------

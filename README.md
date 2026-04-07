@@ -1,6 +1,6 @@
 # Points Are Bad — F1 Prediction Game
 
-A Python CLI for playing "Points are Bad" — a Formula 1 prediction game among friends where players predict the Top 10 finishers of every Grand Prix. The objective is to accumulate the *fewest* points across the season.
+A Python CLI and web dashboard for playing "Points are Bad" — a Formula 1 prediction game among friends where players predict the Top 10 finishers of every Grand Prix. The objective is to accumulate the *fewest* points across the season.
 
 ## Rules
 
@@ -8,6 +8,22 @@ A Python CLI for playing "Points are Bad" — a Formula 1 prediction game among 
 - Each incorrect prediction slot scores **+1 point**.
 - A missing prediction for a race scores a flat **+10 point penalty**.
 - The player with the fewest points at the end of the season wins.
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Language | Python 3.9+ |
+| Package manager | [uv](https://github.com/astral-sh/uv) |
+| Web server | [Flask](https://flask.palletsprojects.com/) 3.x + [Gunicorn](https://gunicorn.org/) 22.x (production) |
+| Rate limiting | [flask-limiter](https://flask-limiter.readthedocs.io/) 3.x |
+| Frontend | Vanilla HTML / CSS / JS — no build step, no framework |
+| F1 data (primary) | [FastF1](https://docs.fastf1.dev/) 3.x — official timing & results |
+| F1 data (fallback) | [OpenF1](https://openf1.org/) REST API via `urllib` |
+| Data storage | JSON flat-file with atomic writes and 3 rolling backups |
+| Testing | [pytest](https://pytest.org/) + [pytest-cov](https://pytest-cov.readthedocs.io/) (80% threshold enforced) |
+| CI | GitHub Actions (lint + test on push/PR) |
+| Linting | pre-commit hooks (ruff, mypy) |
 
 ## Requirements
 
@@ -20,16 +36,116 @@ A Python CLI for playing "Points are Bad" — a Formula 1 prediction game among 
 git clone <repo>
 cd points-are-bad
 uv venv
-uv pip install -e .[dev]   # omit [dev] to skip test/lint tools
+uv pip install -e '.[dev,web]'   # CLI + Flask + Gunicorn + dev tools
 ```
 
-## Running
+`[web]` pulls in Flask, flask-limiter, and Gunicorn. `[dev]` adds pytest, ruff, mypy, and pre-commit.
+
+## CLI
 
 ```bash
 .venv/bin/points-are-bad
 ```
 
 Data is auto-created at `points_are_bad_data.json` in the working directory. Override with `POINTS_DATA_FILE=/path/to/file.json`.
+
+## Web Dashboard
+
+### Development (Flask dev server)
+
+```bash
+uv run web/server.py            # → http://localhost:5001
+# or, after installing scripts:
+points-are-bad-web
+
+PORT=8080 points-are-bad-web   # custom port
+```
+
+### Production (Gunicorn)
+
+```bash
+gunicorn -c gunicorn.conf.py web.server:app
+```
+
+The `gunicorn.conf.py` pins `workers=1` (required — the threading.Lock used for JSON writes is in-process), `threads=4`, and logs to stdout/stderr. See the file for the full rationale.
+
+### Docker
+
+```bash
+# Build and run
+docker build -t points-are-bad .
+docker run -p 5001:5001 -v $(pwd)/data:/data -e API_TOKEN=<secret> points-are-bad
+
+# Or with docker-compose (recommended — handles the data volume automatically)
+mkdir -p data
+API_TOKEN=$(openssl rand -hex 32) docker compose up
+```
+
+`API_TOKEN` is a shared secret required by all write endpoints (`POST /predictions`, `POST /results`, `POST /players`). Without it, those endpoints are open — suitable only for local dev. Pass it as a `Bearer` token:
+
+```bash
+curl -X POST http://localhost:5001/players \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "alice"}'
+```
+
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `5001` | TCP port the server listens on |
+| `POINTS_DATA_FILE` | `points_are_bad_data.json` | Path to the JSON data file |
+| `API_TOKEN` | *(unset — open)* | Bearer token required for write endpoints |
+| `RATELIMIT_ENABLED` | `true` | Set to `false` to disable rate limiting |
+
+The dashboard provides:
+- **Season standings** with score bars and delta from the leader
+- **Race log** — click any completed race to see a full position-by-position breakdown
+- **Pending predictions** — clicking an upcoming race shows who has submitted picks and who hasn't
+- **Prediction entry** — `+ PREDICT` opens a 3-step modal: select pilot → select race → pick P1–P10 from the driver roster
+- **New pilot creation** — add a player inline from step 1 of the prediction modal
+
+### Web API
+
+All write endpoints require `Authorization: Bearer <API_TOKEN>` when `API_TOKEN` is set. Requests exceeding 16 KB are rejected with `413`. Rate limits apply per IP (write endpoints are stricter than reads).
+
+| Method | Path | Auth | Rate limit | Description |
+|--------|------|------|------------|-------------|
+| `GET` | `/data` | — | 300/hr, 60/min | Full game state as JSON |
+| `GET` | `/aliases` | — | 300/hr, 60/min | Driver alias table (mirrors `scoring.ALIASES`) |
+| `POST` | `/predictions` | Bearer | 60/hr, 10/min | Submit or overwrite a prediction |
+| `POST` | `/results` | Bearer | 30/hr, 5/min | Enter actual race results |
+| `POST` | `/players` | Bearer | 20/hr, 5/min | Add a new player |
+
+`POST /predictions` body:
+```json
+{
+  "player": "alice",
+  "race_name": "Bahrain Grand Prix",
+  "prediction": ["verstappen", "norris", "leclerc", ...],
+  "overwrite": false
+}
+```
+Returns `409` if a prediction already exists and `overwrite` is not `true`.
+
+`POST /results` body:
+```json
+{
+  "race_name": "Bahrain Grand Prix",
+  "results": [
+    {"name": "Max Verstappen", "abbr": "VER"},
+    ...
+  ]
+}
+```
+Returns `409` if results are already entered for that race.
+
+`POST /players` body:
+```json
+{ "name": "alice" }
+```
+Returns `409` if the player already exists (not `400` — so clients can distinguish "name taken" from "name invalid").
 
 ## Testing
 
@@ -38,6 +154,8 @@ Data is auto-created at `points_are_bad_data.json` in the working directory. Ove
 .venv/bin/pytest tests/test_scoring.py -v     # single module
 .venv/bin/pytest tests/ --cov=points_are_bad  # with coverage
 ```
+
+Coverage threshold is 80%, enforced by `pytest-cov`.
 
 ## Architecture
 
@@ -51,22 +169,27 @@ src/points_are_bad/
   models.py     TypedDicts: GameData, RaceData, DriverResult, DriverInfo
   exceptions.py PointsAreBadError hierarchy (ApiError, StorageError, …)
 
+web/
+  server.py     Flask server: serves index.html + JSON API endpoints
+  index.html    Single-page dashboard (pure HTML/CSS/JS, no build step)
+
 tests/
-  conftest.py         Shared fixtures (sample_data, no_clear_screen)
-  test_scoring.py     56 tests — 100% coverage of scoring.py
-  test_storage.py     Round-trip, error-path tests — 100% storage.py
-  test_drivers.py     Roster integrity, lookup helpers
-  test_cli_utils.py   Pure CLI helpers, mocked select_item
-  test_cli_menus.py   Interactive menus with mocked input()
-  test_api.py         urllib + fastf1 mocked, all fallback paths
+  conftest.py           Shared fixtures (sample_data, no_clear_screen)
+  test_scoring.py       100% coverage of scoring.py
+  test_storage.py       Round-trip + error-path tests — 100% storage.py
+  test_drivers.py       Roster integrity, lookup helpers
+  test_cli_utils.py     Pure CLI helpers, mocked select_item
+  test_cli_menus.py     Interactive menus with mocked input()
+  test_api.py           urllib + fastf1 mocked, all fallback paths
+  test_web_server.py    Flask test client — all endpoints + validation paths
 ```
 
 ### Key data flow
 
 1. `cli.py:main_menu()` loads `GameData` from JSON via `storage.load_data()`.
 2. On startup it calls `auto_update_past_races()` which fetches missing results via `api.fetch_results()`.
-3. Scoring is always delegated to `scoring.calculate_player_points_for_race()` — the single source of truth for per-race points.
-4. All writes go through `storage.save_data()`.
+3. Scoring is always delegated to `scoring.calculate_player_points_for_race()` — the single source of truth for per-race points. The web dashboard replicates this logic in JavaScript (`calcPlayerPoints` in `index.html`) and verifies it by fetching `ALIASES` from `/aliases` on load.
+4. All writes go through `storage.save_data()` (CLI) or directly via the Flask endpoints (web), both of which hold a `threading.Lock` during read-modify-write.
 
 ### API quirk — FastF1 monkey-patches `requests`
 
@@ -78,9 +201,10 @@ Must call in sequence: `/meetings` → `/sessions` → `/session_result` → `/d
 
 ## Features
 
-- **Player management** — add/remove players at any time.
+- **Player management** — add/remove players via CLI or web dashboard.
 - **Race schedule** — auto-populate from FastF1; dates are kept in sync.
-- **Driver-select UI** — interactive picker grouped by team, with a confirmation screen.
+- **Driver-select UI** — interactive picker grouped by team, available in both CLI and web.
 - **Automated result fetching** — FastF1 (official) → OpenF1 (community) → manual entry.
 - **Points breakdown** — per-position view for any race across all players.
 - **Season standings** — live table sorted by fewest points.
+- **Web dashboard** — aerospace-aesthetic dark-mode SPA; no build step required.

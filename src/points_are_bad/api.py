@@ -284,7 +284,7 @@ def get_schedule_updates(
         )
 
         if existing:
-            if not existing.get("date") and date_str:
+            if date_str and existing.get("date") != date_str:
                 date_updates.append((existing, date_str))
         else:
             new_races.append(

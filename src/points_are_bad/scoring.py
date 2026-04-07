@@ -15,13 +15,7 @@ from typing import TYPE_CHECKING, Union
 if TYPE_CHECKING:
     from .models import DriverResult, GameData
 
-    # Private type alias used in function signatures below.  Lives entirely
-    # inside TYPE_CHECKING because:
-    #   1. All annotations are lazy strings (from __future__ import annotations),
-    #      so _ActualEntry is never evaluated at runtime.
-    #   2. Using DriverResult (the concrete TypedDict) keeps mypy happy with
-    #      callers that pass list[DriverResult | str] from models.RaceData.
-    _ActualEntry = Union[DriverResult, str]
+    _ActualEntry = Union[DriverResult, str]  # str kept for legacy callers only
 
 __all__ = [
     "ALIASES",
@@ -38,39 +32,47 @@ __all__ = [
 # every scoring call.
 # ---------------------------------------------------------------------------
 ALIASES: dict[str, str] = {
-    "kimi": "antonelli",
-    "lec": "leclerc",
-    "ver": "verstappen",
-    "max": "verstappen",
-    "ham": "hamilton",
+    # McLaren
     "nor": "norris",
     "pia": "piastri",
+    # Ferrari
+    "lec": "leclerc",
+    "ham": "hamilton",
+    # Mercedes
     "rus": "russell",
+    "kimi": "antonelli",
+    # Red Bull
+    "ver": "verstappen",
+    "max": "verstappen",
+    "hadj": "hadjar",
+    "had": "hadjar",
+    # Racing Bulls
+    "law": "lawson",
     "lind": "lindblad",
     "linblad": "lindblad",
+    "lin": "lindblad",
+    # Aston Martin
+    "alo": "alonso",
+    "str": "stroll",
+    # Williams
+    "sai": "sainz",
+    "alb": "albon",
+    # Alpine
+    "gas": "gasly",
+    "col": "colapinto",
+    # Haas
+    "oco": "ocon",
+    "bea": "bearman",
+    "ollie": "bearman",
+    # Audi
+    "hul": "hulkenberg",
     "bor": "bortoleto",
     "gabby": "bortoleto",
     "gab": "bortoleto",
-    "hadj": "hadjar",
-    "alo": "alonso",
+    # Cadillac
     "per": "perez",
     "checo": "perez",
-    "gas": "gasly",
-    "oco": "ocon",
-    "tsu": "tsunoda",
-    "yuki": "tsunoda",
-    "hul": "hulkenberg",
-    "str": "stroll",
-    "mag": "magnussen",
-    "alb": "albon",
-    "col": "colapinto",
-    "bea": "bearman",
-    "ollie": "bearman",
-    "sai": "sainz",
-    "zho": "zhou",
     "bot": "bottas",
-    "law": "lawson",
-    "doo": "doohan",
 }
 
 # Translation table that strips hidden Unicode formatting characters that can
@@ -88,10 +90,10 @@ def calculate_str_equality(prediction: str, actual: _ActualEntry) -> bool:
     """Return ``True`` if *prediction* matches *actual*.
 
     *actual* may be:
-      - a plain string  (manual entry)
-      - a dict with keys ``BroadcastName`` / ``FirstName`` / ``LastName`` /
-        ``Abbreviation`` (FastF1 / OpenF1 result)
       - a dict with keys ``abbr`` / ``name`` (stored :class:`~models.DriverResult`)
+      - a dict with keys ``BroadcastName`` / ``FirstName`` / ``LastName`` /
+        ``Abbreviation`` (FastF1 / OpenF1 result — passed directly before storage)
+      - a plain string (legacy; normalised to dicts by storage._migrate on load)
 
     Matching is case-insensitive and alias-aware.  A substring match on
     normalised values is accepted (e.g. "perez" matches "S PEREZ").
@@ -102,11 +104,12 @@ def calculate_str_equality(prediction: str, actual: _ActualEntry) -> bool:
         for val in actual.values():
             if not val:
                 continue
-            v = _normalize(str(val))  # values() is object-typed; str() is a no-op for str values
+            v = _normalize(str(val))
             if p == v or (v and p in v):
                 return True
         return False
 
+    # Plain-string path: only reached for unsaved in-memory results or tests.
     b = _normalize(actual)
     return p == b or bool(b and p in b)
 

@@ -48,8 +48,9 @@ class RaceData(TypedDict):
 
     name: str
     date: str
-    # May be DriverResult dicts (from API) or plain strings (manual entry).
-    actual_results: list[DriverResult | str]
+    # Always a list of DriverResult dicts — plain-string manual entries are
+    # normalised to {"name": ..., "abbr": ""} by storage._migrate() on load.
+    actual_results: list[DriverResult]
     # player name -> ordered list of canonical driver keys (lowercase)
     predictions: dict[str, list[str]]
 

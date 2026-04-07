@@ -13,6 +13,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+web = [
+    "flask>=3.0",
+    "flask-limiter>=3.0",
+    "gunicorn>=22.0",
+]
 dev = [
     "mypy>=1.9",
     "pytest>=8.0",
@@ -22,7 +27,8 @@ dev = [
 ]
 
 [project.scripts]
-points-are-bad = "points_are_bad.cli:main_menu"
+points-are-bad     = "points_are_bad.cli:main_menu"
+points-are-bad-web = "web.server:run"
 
 # ---------------------------------------------------------------------------
 # pytest
@@ -30,7 +36,7 @@ points-are-bad = "points_are_bad.cli:main_menu"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 addopts = "--cov=points_are_bad --cov-report=term-missing --cov-fail-under=80"
 
 [tool.coverage.run]

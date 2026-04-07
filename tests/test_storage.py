@@ -2,6 +2,7 @@
 
 import json
 import os
+import pathlib
 
 import pytest
 
@@ -27,13 +28,18 @@ class TestLoadData:
     def test_returns_default_when_no_file(self, isolated_data_file):
         assert not os.path.exists(isolated_data_file)
         data = load_data()
-        assert data == {"players": [], "races": []}
+        assert data["players"] == []
+        assert data["races"] == []
+        # load_data writes the default so callers always have a file-backed object
+        assert os.path.exists(isolated_data_file)
 
     def test_loads_existing_file(self, isolated_data_file):
         payload = {"players": ["alice"], "races": []}
         with open(isolated_data_file, "w") as f:
             json.dump(payload, f)
-        assert load_data() == payload
+        data = load_data()
+        assert data["players"] == ["alice"]
+        assert data["races"] == []
 
     def test_loads_nested_data(self, isolated_data_file):
         payload = {
@@ -49,7 +55,31 @@ class TestLoadData:
         }
         with open(isolated_data_file, "w") as f:
             json.dump(payload, f)
-        assert load_data() == payload
+        data = load_data()
+        assert data["players"] == payload["players"]
+        assert data["races"] == payload["races"]
+
+    def test_migration_adds_version(self, isolated_data_file):
+        """v0 data (no version field) gets version=1 after load."""
+        with open(isolated_data_file, "w") as f:
+            json.dump({"players": [], "races": []}, f)
+        data = load_data()
+        assert data["version"] == 1  # type: ignore[typeddict-item]
+
+    def test_migration_normalises_plain_string_results(self, isolated_data_file):
+        """v0 plain-string actual_results are converted to DriverResult dicts."""
+        with open(isolated_data_file, "w") as f:
+            json.dump({
+                "players": [],
+                "races": [{"name": "R", "date": "2026-01-01",
+                           "actual_results": ["verstappen", "norris"],
+                           "predictions": {}}],
+            }, f)
+        race = load_data()["races"][0]
+        assert race["actual_results"] == [
+            {"name": "verstappen", "abbr": ""},
+            {"name": "norris", "abbr": ""},
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +111,37 @@ class TestSaveData:
         save_data({"players": ["bob"], "races": []})
         assert load_data()["players"] == ["bob"]
 
+    def test_unicode_preserved(self, isolated_data_file):
+        """Non-ASCII characters must survive the round-trip without escaping."""
+        save_data({"players": ["São Paulo"], "races": []})
+        raw = pathlib.Path(isolated_data_file).read_text(encoding="utf-8")
+        assert "São Paulo" in raw  # not \u00e3
+
+    def test_three_backups_created(self, isolated_data_file):
+        """After four saves the three .bak files exist with correct contents."""
+        import pathlib as _pl
+        p = _pl.Path(isolated_data_file)
+        for i in range(1, 5):
+            save_data({"players": [f"save{i}"], "races": []})
+
+        bak1 = json.loads(p.with_suffix(".bak1").read_text())
+        bak2 = json.loads(p.with_suffix(".bak2").read_text())
+        bak3 = json.loads(p.with_suffix(".bak3").read_text())
+        live = json.loads(p.read_text())
+
+        assert live["players"] == ["save4"]
+        assert bak1["players"] == ["save3"]
+        assert bak2["players"] == ["save2"]
+        assert bak3["players"] == ["save1"]
+
+    def test_fourth_backup_not_kept(self, isolated_data_file):
+        """Only three .bak files exist — no .bak4."""
+        import pathlib as _pl
+        p = _pl.Path(isolated_data_file)
+        for i in range(5):
+            save_data({"players": [f"s{i}"], "races": []})
+        assert not p.with_suffix(".bak4").exists()
+
 
 # ---------------------------------------------------------------------------
 # Round-trip
@@ -106,6 +167,7 @@ class TestRoundTrip:
                     "predictions": {"alice": ["verstappen", "norris"]},
                 }
             ],
+            "version": 1,
         }
         save_data(original)
         assert load_data() == original

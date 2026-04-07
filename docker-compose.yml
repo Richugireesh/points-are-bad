@@ -1,0 +1,27 @@
+services:
+  web:
+    build: .
+    ports:
+      - "${PORT:-5001}:5001"
+    volumes:
+      # Persist the JSON data file across container restarts.
+      # Create the directory on the host first: mkdir -p ./data
+      - ./data:/data
+    environment:
+      # Required for write endpoints.  Set a strong random value in production:
+      #   API_TOKEN=$(openssl rand -hex 32)
+      API_TOKEN: "${API_TOKEN:-}"
+      # Override the data file path (already set in the Dockerfile, repeated
+      # here for clarity and to allow host-side override).
+      POINTS_DATA_FILE: /data/points_are_bad_data.json
+      # Set to "false" to disable rate limiting during local development.
+      RATELIMIT_ENABLED: "${RATELIMIT_ENABLED:-true}"
+    restart: unless-stopped
+    # Matches the HEALTHCHECK in the Dockerfile; compose uses it for depends_on.
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:5001/aliases')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

@@ -1,0 +1,2276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>POINTS ARE BAD // F1-2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+<style>
+/* ─────────────────────────────────────────────────────
+   TOKENS
+───────────────────────────────────────────────────── */
+:root {
+  --bg:           #070b0f;
+  --bg-panel:     #0b1219;
+  --bg-panel-alt: #0d1520;
+  --bg-hover:     #111d28;
+  --bg-selected:  #0f2030;
+
+  --border:       #1a2e3e;
+  --border-bright:#2a5070;
+  --border-accent:#004d6e;
+
+  --accent:       #00aaff;
+  --accent-dim:   #006699;
+  --accent-glow:  rgba(0,170,255,.15);
+
+  --green:        #00ff88;
+  --green-dim:    #007744;
+  --red:          #ff3355;
+  --red-dim:      #550018;
+  --amber:        #ffcc00;
+  --amber-dim:    #664d00;
+
+  --text:         #a8c0d0;
+  --text-bright:  #d0e8f5;
+  --text-dim:     #3a5060;
+  --text-label:   #4a7890;
+
+  --rank-1:       #ffcc00;
+  --rank-2:       #a0b8c8;
+  --rank-3:       #cd7f32;
+
+  --font-mono: 'Space Mono', 'JetBrains Mono', 'Fira Mono', monospace;
+
+  --panel-radius: 2px;
+  --gap: 12px;
+}
+
+/* ─────────────────────────────────────────────────────
+   RESET / BASE
+───────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* scanline overlay */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 2px,
+    rgba(0,0,0,.07) 2px,
+    rgba(0,0,0,.07) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ─────────────────────────────────────────────────────
+   SCROLLBAR
+───────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 0; }
+
+/* ─────────────────────────────────────────────────────
+   TYPOGRAPHY UTILS
+───────────────────────────────────────────────────── */
+.label {
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-label);
+}
+
+.mono { font-family: var(--font-mono); }
+.bright { color: var(--text-bright); }
+.dim { color: var(--text-dim); }
+.accent { color: var(--accent); }
+.green { color: var(--green); }
+.red { color: var(--red); }
+.amber { color: var(--amber); }
+
+/* ─────────────────────────────────────────────────────
+   LAYOUT
+───────────────────────────────────────────────────── */
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ─────────────────────────────────────────────────────
+   HEADER BAR
+───────────────────────────────────────────────────── */
+#header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  height: 48px;
+  flex-shrink: 0;
+}
+
+#header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent-dim), var(--accent), var(--accent-dim));
+}
+
+.header-mission {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-bright);
+  letter-spacing: .08em;
+  white-space: nowrap;
+}
+
+.header-mission span {
+  color: var(--accent);
+}
+
+.header-sep {
+  color: var(--text-dim);
+}
+
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex: 1;
+}
+
+.header-stat {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.header-stat .lbl { font-size: 9px; letter-spacing: .1em; color: var(--text-dim); text-transform: uppercase; }
+.header-stat .val { font-size: 12px; color: var(--text-bright); }
+
+.header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: pulse 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .4; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.btn-submitting {
+  position: relative;
+  pointer-events: none;
+  opacity: .7;
+}
+.btn-submitting::after {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 1px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  margin-left: 7px;
+  vertical-align: middle;
+}
+
+}
+
+#clock {
+  font-size: 13px;
+  color: var(--accent);
+  letter-spacing: .06em;
+  white-space: nowrap;
+}
+
+/* ─────────────────────────────────────────────────────
+   MAIN GRID
+───────────────────────────────────────────────────── */
+#main {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  grid-template-rows: auto 1fr;
+  gap: var(--gap);
+  padding: var(--gap);
+  flex: 1;
+  min-height: 0;
+}
+
+/* ─────────────────────────────────────────────────────
+   PANELS
+───────────────────────────────────────────────────── */
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--panel-radius);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* top accent line */
+.panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: var(--border-bright);
+  opacity: .5;
+}
+
+/* corner bracket decorations */
+.panel::after {
+  content: '';
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 8px; height: 8px;
+  border-bottom: 1px solid var(--border-bright);
+  border-right: 1px solid var(--border-bright);
+  opacity: .4;
+}
+
+.panel-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  background: rgba(0,0,0,.2);
+}
+
+.panel-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-bright);
+}
+
+.panel-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  background: var(--border-accent);
+  color: var(--accent);
+  border: 1px solid var(--accent-dim);
+  letter-spacing: .08em;
+}
+
+.panel-body {
+  padding: 10px 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* ─────────────────────────────────────────────────────
+   STANDINGS PANEL (left sidebar)
+───────────────────────────────────────────────────── */
+#panel-standings {
+  grid-column: 1;
+  grid-row: 1 / 3;
+}
+
+.standings-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.standings-table th {
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-align: left;
+  padding: 0 4px 6px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.standings-row {
+  border-bottom: 1px solid rgba(26,46,62,.5);
+  transition: background .1s;
+}
+
+.standings-row:last-child { border-bottom: none; }
+.standings-row:hover { background: var(--bg-hover); }
+
+.standings-row td {
+  padding: 7px 4px;
+  vertical-align: middle;
+}
+
+.standings-rank {
+  font-size: 11px;
+  font-weight: 700;
+  width: 22px;
+  text-align: center;
+}
+
+.rank-1 { color: var(--rank-1); }
+.rank-2 { color: var(--rank-2); }
+.rank-3 { color: var(--rank-3); }
+
+.standings-name {
+  font-size: 12px;
+  color: var(--text-bright);
+  text-transform: lowercase;
+  letter-spacing: .04em;
+}
+
+.standings-pts {
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  color: var(--text-bright);
+  width: 36px;
+}
+
+.standings-delta {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: right;
+  width: 32px;
+}
+
+.standings-bar-wrap {
+  padding: 0 2px 2px 2px;
+}
+
+.standings-bar {
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+  overflow: hidden;
+  margin-top: -1px;
+}
+
+.standings-bar-fill {
+  height: 100%;
+  border-radius: 1px;
+  transition: width .6s ease;
+}
+
+.fill-1 { background: linear-gradient(90deg, var(--rank-1), #ffa500); }
+.fill-2 { background: var(--rank-2); }
+.fill-3 { background: var(--rank-3); }
+.fill-n { background: var(--accent-dim); }
+
+/* scoring note */
+.scoring-note {
+  margin-top: 14px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  background: rgba(0,0,0,.2);
+}
+
+.scoring-note p {
+  font-size: 10px;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+.scoring-note p span {
+  color: var(--text);
+}
+
+/* ─────────────────────────────────────────────────────
+   RACE LOG PANEL
+───────────────────────────────────────────────────── */
+#panel-races {
+  grid-column: 2;
+  grid-row: 1;
+  max-height: 360px;
+}
+
+.race-list { list-style: none; }
+
+.race-item {
+  display: grid;
+  grid-template-columns: 22px 1fr auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 4px;
+  border-bottom: 1px solid rgba(26,46,62,.5);
+  cursor: pointer;
+  transition: background .1s;
+  border-left: 2px solid transparent;
+}
+
+.race-delete-btn {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 2px;
+  line-height: 1;
+  transition: color .15s, border-color .15s;
+}
+.race-delete-btn:hover {
+  color: var(--red);
+  border-color: var(--red-dim);
+}
+
+.race-item:last-child { border-bottom: none; }
+.race-item:hover { background: var(--bg-hover); }
+
+.add-race-form {
+  display: flex;
+  gap: 6px;
+  padding: 8px 4px 4px;
+  border-top: 1px solid var(--border);
+  align-items: center;
+}
+.add-race-form input {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 4px 6px;
+  border-radius: 2px;
+}
+.add-race-form input:focus { border-color: var(--accent); outline: none; }
+.add-race-form input[name="race-name"] { flex: 1; min-width: 0; }
+.add-race-form input[name="race-date"] { width: 100px; }
+.add-race-form button {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.add-race-form button:hover { border-color: var(--accent); }
+
+.race-item.selected {
+  background: var(--bg-selected);
+  border-left-color: var(--accent);
+}
+
+.race-item.has-results .race-status-dot { background: var(--green); box-shadow: 0 0 5px var(--green); }
+.race-item.upcoming   .race-status-dot { background: var(--text-dim); box-shadow: none; animation: none; }
+.race-item.next-up    .race-status-dot { background: var(--amber); box-shadow: 0 0 5px var(--amber); animation: pulse 1.5s ease-in-out infinite; }
+
+.race-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  justify-self: center;
+}
+
+.race-name {
+  font-size: 12px;
+  color: var(--text-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.race-date {
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.race-tag {
+  font-size: 9px;
+  letter-spacing: .08em;
+  padding: 1px 5px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.race-tag.done      { color: var(--green); border-color: var(--green-dim); background: rgba(0,255,136,.05); }
+.race-tag.upcoming  { color: var(--text-dim); border-color: var(--border); }
+.race-tag.next-up   { color: var(--amber); border-color: var(--amber-dim); background: rgba(255,204,0,.05); }
+
+/* ─────────────────────────────────────────────────────
+   RACE DETAIL PANEL
+───────────────────────────────────────────────────── */
+#panel-detail {
+  grid-column: 2;
+  grid-row: 2;
+  min-height: 0;
+}
+
+.detail-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 120px;
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: .06em;
+  border: 1px dashed var(--border);
+  border-radius: var(--panel-radius);
+}
+
+/* score summary bar at top of detail */
+.detail-scores {
+  display: flex;
+  gap: 20px;
+  padding: 10px 12px;
+  background: rgba(0,0,0,.2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.detail-score-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 60px;
+}
+
+.detail-score-chip .player-name {
+  font-size: 10px;
+  letter-spacing: .06em;
+  color: var(--text-dim);
+  text-transform: lowercase;
+}
+
+.detail-score-chip .player-pts {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-bright);
+  line-height: 1.1;
+}
+
+.detail-score-chip .player-rank {
+  font-size: 9px;
+  color: var(--text-dim);
+}
+
+.detail-score-chip.rank-first .player-pts  { color: var(--green); }
+.detail-score-chip.rank-second .player-pts { color: var(--text-bright); }
+.detail-score-chip.rank-last .player-pts   { color: var(--red); }
+
+/* position grid */
+.detail-grid {
+  overflow-x: auto;
+}
+
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 400px;
+}
+
+.detail-table th {
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.detail-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(26,46,62,.4);
+  vertical-align: middle;
+}
+
+.detail-table tr:last-child td { border-bottom: none; }
+.detail-table tr:hover td { background: rgba(255,255,255,.02); }
+
+.pos-num {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: center;
+  width: 28px;
+}
+
+.actual-driver {
+  font-size: 12px;
+  color: var(--text-bright);
+}
+
+.actual-abbr {
+  font-size: 10px;
+  color: var(--text-dim);
+  padding-left: 6px;
+}
+
+.pred-cell {
+  font-size: 11px;
+  padding: 3px 8px;
+  text-align: center;
+  min-width: 80px;
+}
+
+.pred-cell.match {
+  color: var(--green);
+  background: rgba(0,255,136,.06);
+}
+
+.pred-cell.miss {
+  color: var(--red);
+  background: rgba(255,51,85,.06);
+}
+
+.pred-cell.no-pred {
+  color: var(--text-dim);
+}
+
+.pred-tick {
+  font-size: 11px;
+  margin-right: 4px;
+}
+
+/* driver key display in prediction cells */
+.pred-key {
+  font-size: 10px;
+  opacity: .7;
+}
+
+/* ─────────────────────────────────────────────────────
+   TEAM COLOR DOTS
+───────────────────────────────────────────────────── */
+.team-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* ─────────────────────────────────────────────────────
+   LOADING / ERROR STATES
+───────────────────────────────────────────────────── */
+.loading-screen, .error-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  z-index: 1000;
+}
+
+.loading-glyph {
+  font-size: 32px;
+  letter-spacing: .3em;
+  color: var(--accent);
+  animation: blink .8s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+.loading-label {
+  font-size: 11px;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--text-label);
+}
+
+.error-msg {
+  font-size: 12px;
+  color: var(--red);
+  text-align: center;
+  max-width: 400px;
+  line-height: 1.8;
+}
+
+.error-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* ─────────────────────────────────────────────────────
+   RESPONSIVE
+───────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  #main {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+  }
+  #panel-standings { grid-column: 1; grid-row: 1; }
+  #panel-races     { grid-column: 1; grid-row: 2; max-height: none; }
+  #panel-detail    { grid-column: 1; grid-row: 3; }
+  .header-meta { gap: 10px; }
+  .header-stat:nth-child(n+3) { display: none; }
+}
+
+@media (max-width: 480px) {
+  #header { gap: 10px; padding: 0 10px; }
+  .header-mission { font-size: 11px; }
+  #main { padding: 8px; gap: 8px; }
+}
+
+/* ─────────────────────────────────────────────────────
+   MISC
+───────────────────────────────────────────────────── */
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 8px 0;
+}
+
+.no-data {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 20px;
+  text-align: center;
+  letter-spacing: .06em;
+}
+
+/* ─────────────────────────────────────────────────────
+   PREDICT MODAL
+───────────────────────────────────────────────────── */
+#predict-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(7,11,15,.88);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+}
+
+.modal-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-bright);
+  width: min(680px, 96vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.modal-panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  z-index: 1;
+}
+
+.modal-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0,0,0,.3);
+  flex-shrink: 0;
+}
+
+.modal-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-bright);
+  flex: 1;
+}
+
+.modal-close {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 3px 9px;
+  cursor: pointer;
+  letter-spacing: .05em;
+  transition: all .1s;
+}
+
+.modal-close:hover { border-color: var(--red); color: var(--red); }
+
+.modal-steps {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.modal-step-ind {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 9px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border-right: 1px solid var(--border);
+  text-align: center;
+  transition: all .15s;
+}
+
+.modal-step-ind:last-child { border-right: none; }
+.modal-step-ind.active { color: var(--accent); background: var(--accent-glow); }
+.modal-step-ind.done   { color: var(--green-dim); }
+
+.modal-body {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.modal-footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  background: rgba(0,0,0,.2);
+}
+
+/* player tiles */
+.player-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.player-tile {
+  padding: 16px 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel-alt);
+  cursor: pointer;
+  text-align: center;
+  font-size: 14px;
+  letter-spacing: .08em;
+  color: var(--text-bright);
+  transition: all .1s;
+}
+
+.player-tile:hover, .player-tile.selected {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+  color: var(--accent);
+}
+
+/* race select rows */
+.race-select-list { list-style: none; }
+
+.race-select-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(26,46,62,.5);
+  cursor: pointer;
+  transition: background .1s;
+  border-left: 2px solid transparent;
+}
+
+.race-select-item:last-child { border-bottom: none; }
+.race-select-item:hover:not(.predicted) { background: var(--bg-hover); }
+.race-select-item.selected { background: var(--bg-selected); border-left-color: var(--accent); }
+.race-select-item.predicted { opacity: .45; cursor: default; }
+
+.race-select-name { font-size: 12px; color: var(--text-bright); flex: 1; }
+.race-select-date { font-size: 10px; color: var(--text-dim); white-space: nowrap; }
+
+.race-select-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border: 1px solid;
+  letter-spacing: .08em;
+  white-space: nowrap;
+}
+
+.race-select-badge.open      { color: var(--accent);    border-color: var(--accent-dim); }
+.race-select-badge.predicted { color: var(--green-dim); border-color: var(--green-dim); }
+
+/* driver picker */
+.picker-layout {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 14px;
+  min-height: 340px;
+}
+
+.slots-col { display: flex; flex-direction: column; gap: 3px; }
+
+.slot-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel-alt);
+  min-height: 30px;
+}
+
+.slot-item.filled {
+  border-color: var(--accent-dim);
+  background: rgba(0,100,150,.08);
+  cursor: pointer;
+}
+
+.slot-item.filled:hover { border-color: var(--red); background: var(--red-dim); }
+
+.slot-num { font-size: 10px; color: var(--text-dim); width: 22px; text-align: right; flex-shrink: 0; }
+.slot-name { font-size: 11px; color: var(--accent); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot-empty { font-size: 10px; color: var(--text-dim); }
+
+.slots-count { font-size: 10px; color: var(--text-dim); margin-top: 6px; padding-left: 4px; }
+
+.drivers-col { overflow-y: auto; }
+
+.team-group { margin-bottom: 10px; }
+
+.team-group-label {
+  font-size: 9px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-label);
+  padding: 2px 6px;
+  margin-bottom: 4px;
+  border-left: 3px solid;
+}
+
+.driver-btn-row { display: flex; gap: 4px; flex-wrap: wrap; }
+
+.driver-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text);
+  cursor: pointer;
+  transition: all .1s;
+  letter-spacing: .04em;
+}
+
+.driver-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.driver-btn:disabled { opacity: .2; cursor: default; }
+
+/* modal action buttons */
+.btn {
+  padding: 6px 14px;
+  border: 1px solid;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all .1s;
+}
+
+.btn-primary { color: var(--accent); border-color: var(--accent-dim); }
+.btn-primary:hover:not(:disabled) { background: var(--accent-glow); border-color: var(--accent); }
+.btn-primary:disabled { opacity: .35; cursor: default; }
+
+.btn-ghost { color: var(--text-dim); border-color: var(--border); }
+.btn-ghost:hover { color: var(--text); border-color: var(--border-bright); }
+
+/* header predict button */
+#btn-predict {
+  padding: 5px 12px;
+  border: 1px solid var(--accent-dim);
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  cursor: pointer;
+  transition: all .1s;
+  flex-shrink: 0;
+}
+
+#btn-predict:hover { background: var(--accent-glow); border-color: var(--accent); }
+
+/* toast */
+#toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  padding: 10px 16px;
+  border: 1px solid var(--green-dim);
+  background: rgba(0,20,12,.96);
+  color: var(--green);
+  font-size: 11px;
+  letter-spacing: .08em;
+  z-index: 1000;
+  transform: translateY(60px);
+  opacity: 0;
+  transition: transform .3s ease, opacity .3s ease;
+  pointer-events: none;
+}
+
+#toast.show { transform: translateY(0); opacity: 1; }
+#toast.error { border-color: var(--red); color: var(--red); background: rgba(20,0,5,.96); }
+
+/* new-pilot inline form */
+.new-player-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  align-items: center;
+}
+
+.pilot-input {
+  flex: 1;
+  padding: 7px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border-bright);
+  color: var(--text-bright);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: .04em;
+  outline: none;
+}
+
+.pilot-input:focus { border-color: var(--accent); }
+.pilot-input::placeholder { color: var(--text-dim); }
+
+/* upcoming-race predictions panel */
+.pending-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,.2);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.pending-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 56px;
+}
+
+.pending-chip .pc-name { font-size: 10px; color: var(--text-dim); letter-spacing: .06em; }
+.pending-chip .pc-status { font-size: 11px; font-weight: 700; }
+.pending-chip.submitted .pc-status { color: var(--green); }
+.pending-chip.missing   .pc-status { color: var(--text-dim); }
+
+.pending-cta {
+  margin-left: auto;
+  padding: 5px 12px;
+  border: 1px solid var(--accent-dim);
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  cursor: pointer;
+  transition: all .1s;
+  flex-shrink: 0;
+}
+
+.pending-cta:hover { background: var(--accent-glow); border-color: var(--accent); }
+.pending-cta-results { border-color: var(--green-dim); color: var(--green); margin-left: 8px; }
+.pending-cta-results:hover { background: rgba(0,255,136,.08); border-color: var(--green); }
+
+.pending-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 300px;
+}
+
+.pending-table th {
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pending-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(26,46,62,.4);
+  font-size: 11px;
+  vertical-align: middle;
+}
+
+.pending-table tr:last-child td { border-bottom: none; }
+.pending-table tr:hover td { background: rgba(255,255,255,.02); }
+
+.pending-pos { font-size: 10px; color: var(--text-dim); width: 28px; text-align: center; }
+.pending-key { color: var(--accent); }
+.pending-no-pred { color: var(--text-dim); }
+
+/* ─────────────────────────────────────────────────────
+   upcoming race highlight */
+.next-race-banner {
+  padding: 7px 10px;
+  background: rgba(255,204,0,.05);
+  border: 1px solid var(--amber-dim);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.next-race-banner .label { color: var(--amber); }
+.next-race-banner .name  { color: var(--text-bright); font-size: 12px; }
+.next-race-banner .date  { color: var(--text-dim); font-size: 10px; margin-left: auto; }
+
+</style>
+</head>
+<body>
+
+<div id="loading-screen" class="loading-screen">
+  <div class="loading-glyph">▋</div>
+  <div class="loading-label">Initialising telemetry feed...</div>
+</div>
+
+<div id="app" style="display:none">
+
+  <!-- ── HEADER ──────────────────────────────────────────────── -->
+  <header id="header">
+    <div class="header-mission">
+      POINTS&nbsp;<span>//</span>&nbsp;ARE&nbsp;<span>//</span>&nbsp;BAD
+      <span style="color:var(--text-dim); font-weight:400; margin-left:6px; font-size:11px;">F1-2026</span>
+    </div>
+
+    <div class="header-meta">
+      <div class="header-stat">
+        <span class="lbl">Pilots</span>
+        <span class="val" id="hdr-players">—</span>
+      </div>
+      <div class="header-stat">
+        <span class="lbl">Rounds</span>
+        <span class="val" id="hdr-rounds">—</span>
+      </div>
+      <div class="header-stat">
+        <span class="lbl">Leader</span>
+        <span class="val" id="hdr-leader">—</span>
+      </div>
+      <div class="header-stat">
+        <span class="lbl">Next GP</span>
+        <span class="val" id="hdr-next">—</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <button id="btn-predict" onclick="openPredictModal()">+ PREDICT</button>
+      <div class="status-dot" title="Live"></div>
+      <div id="clock">00:00:00 UTC</div>
+    </div>
+  </header>
+
+  <!-- ── MAIN GRID ─────────────────────────────────────────── -->
+  <main id="main">
+
+    <!-- Standings sidebar -->
+    <div class="panel" id="panel-standings">
+      <div class="panel-header">
+        <span class="panel-title">Season Standings</span>
+        <span class="panel-badge" id="races-counted-badge">0 / 0</span>
+      </div>
+      <div class="panel-body" id="standings-body">
+        <div class="no-data">loading...</div>
+      </div>
+    </div>
+
+    <!-- Race log -->
+    <div class="panel" id="panel-races">
+      <div class="panel-header">
+        <span class="panel-title">Race Log</span>
+        <span class="label" style="margin-left:auto; font-size:9px">2026 SEASON</span>
+      </div>
+      <div class="panel-body" id="races-body">
+        <div class="no-data">loading...</div>
+      </div>
+    </div>
+
+    <!-- Detail panel -->
+    <div id="panel-detail">
+      <div class="detail-placeholder" id="detail-placeholder">
+        <span style="color:var(--accent);font-size:14px">↑</span>
+        <span>SELECT A COMPLETED RACE TO VIEW BREAKDOWN</span>
+      </div>
+      <div class="panel" id="panel-detail-inner" style="display:none">
+        <div class="panel-header" id="detail-header">
+          <span class="panel-title" id="detail-title"></span>
+          <span class="label" id="detail-date" style="margin-left:8px"></span>
+        </div>
+        <div class="detail-scores" id="detail-scores"></div>
+        <div class="panel-body detail-grid" style="padding:0">
+          <table class="detail-table">
+            <thead>
+              <tr id="detail-thead-row"></tr>
+            </thead>
+            <tbody id="detail-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── PREDICT MODAL ──────────────────────────────────────── -->
+<div id="predict-modal" style="display:none">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title">Enter Prediction</span>
+      <button class="modal-close" onclick="closePredictModal()">✕ CLOSE</button>
+    </div>
+    <div class="modal-steps">
+      <div class="modal-step-ind active" id="step-ind-1">01 // Pilot</div>
+      <div class="modal-step-ind" id="step-ind-2">02 // Race</div>
+      <div class="modal-step-ind" id="step-ind-3">03 // Predict</div>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="modal-back" onclick="modalBack()" style="display:none">← BACK</button>
+      <button class="btn btn-primary" id="modal-next" onclick="modalNext()" disabled>SELECT →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST ──────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// SCORING LOGIC  (mirrors scoring.py exactly)
+// ═══════════════════════════════════════════════════════════════
+
+const ALIASES = {
+  'kimi':'antonelli','lec':'leclerc','ver':'verstappen','max':'verstappen',
+  'ham':'hamilton','nor':'norris','pia':'piastri','rus':'russell',
+  'lind':'lindblad','linblad':'lindblad','bor':'bortoleto','gabby':'bortoleto',
+  'gab':'bortoleto','hadj':'hadjar','alo':'alonso','per':'perez','checo':'perez',
+  'gas':'gasly','oco':'ocon','tsu':'tsunoda','yuki':'tsunoda','hul':'hulkenberg',
+  'str':'stroll','mag':'magnussen','alb':'albon','col':'colapinto','bea':'bearman',
+  'ollie':'bearman','sai':'sainz','zho':'zhou','bot':'bottas','law':'lawson',
+  'doo':'doohan',
+};
+
+function _normalize(s) {
+  s = String(s).toLowerCase().trim()
+    .replace(/\u2060/g, '').replace(/\u200b/g, '');
+  return ALIASES[s] || s;
+}
+
+function calcStrEquality(prediction, actual) {
+  const p = _normalize(prediction);
+  if (actual !== null && typeof actual === 'object') {
+    for (const val of Object.values(actual)) {
+      if (!val) continue;
+      const v = _normalize(String(val));
+      if (p === v || (v && v.includes(p))) return true;
+    }
+    return false;
+  }
+  const b = _normalize(String(actual));
+  return p === b || (b && b.includes(p));
+}
+
+function scorePosition(pred, actualEntry) {
+  if (pred === null && actualEntry === null) return 0;
+  if (pred === null || actualEntry === null) return 1;
+  return calcStrEquality(pred, actualEntry) ? 0 : 1;
+}
+
+function calcPlayerPoints(prediction, actual) {
+  const n = Math.max(prediction.length, actual.length, 10);
+  let total = 0;
+  for (let i = 0; i < n; i++) {
+    const pred = i < prediction.length ? prediction[i] : null;
+    const act  = i < actual.length    ? actual[i]      : null;
+    total += scorePosition(pred, act);
+  }
+  return total;
+}
+
+function calcStandings(data) {
+  const scores = {};
+  for (const p of data.players) scores[p] = 0;
+  let counted = 0;
+
+  for (const race of data.races) {
+    if (!race.actual_results || race.actual_results.length === 0) continue;
+    counted++;
+    for (const player of data.players) {
+      if (race.predictions && race.predictions[player]) {
+        scores[player] += calcPlayerPoints(race.predictions[player], race.actual_results);
+      } else {
+        scores[player] += 10; // missing prediction penalty
+      }
+    }
+  }
+
+  return { scores, counted };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TEAM COLOURS
+// ═══════════════════════════════════════════════════════════════
+
+const TEAM_COLORS = {
+  'McLaren':       '#ff8000',
+  'Ferrari':       '#e8002d',
+  'Mercedes':      '#27f4d2',
+  'Red Bull':      '#3671c6',
+  'Racing Bulls':  '#6692ff',
+  'Aston Martin':  '#358c75',
+  'Williams':      '#64c4ff',
+  'Alpine':        '#ff87bc',
+  'Haas':          '#b6babd',
+  'Audi':          '#2d826d',
+  'Cadillac':      '#c92d4b',
+};
+
+const ROSTER = [
+  {abbr:'NOR',name:'Lando Norris',     team:'McLaren',      key:'norris'},
+  {abbr:'PIA',name:'Oscar Piastri',    team:'McLaren',      key:'piastri'},
+  {abbr:'LEC',name:'Charles Leclerc',  team:'Ferrari',      key:'leclerc'},
+  {abbr:'HAM',name:'Lewis Hamilton',   team:'Ferrari',      key:'hamilton'},
+  {abbr:'RUS',name:'George Russell',   team:'Mercedes',     key:'russell'},
+  {abbr:'ANT',name:'Kimi Antonelli',   team:'Mercedes',     key:'antonelli'},
+  {abbr:'VER',name:'Max Verstappen',   team:'Red Bull',     key:'verstappen'},
+  {abbr:'HAD',name:'Isack Hadjar',     team:'Red Bull',     key:'hadjar'},
+  {abbr:'LAW',name:'Liam Lawson',      team:'Racing Bulls', key:'lawson'},
+  {abbr:'LIN',name:'Arvid Lindblad',   team:'Racing Bulls', key:'lindblad'},
+  {abbr:'ALO',name:'Fernando Alonso',  team:'Aston Martin', key:'alonso'},
+  {abbr:'STR',name:'Lance Stroll',     team:'Aston Martin', key:'stroll'},
+  {abbr:'SAI',name:'Carlos Sainz',     team:'Williams',     key:'sainz'},
+  {abbr:'ALB',name:'Alexander Albon',  team:'Williams',     key:'albon'},
+  {abbr:'GAS',name:'Pierre Gasly',     team:'Alpine',       key:'gasly'},
+  {abbr:'COL',name:'Franco Colapinto', team:'Alpine',       key:'colapinto'},
+  {abbr:'OCO',name:'Esteban Ocon',     team:'Haas',         key:'ocon'},
+  {abbr:'BEA',name:'Oliver Bearman',   team:'Haas',         key:'bearman'},
+  {abbr:'HUL',name:'Nico Hulkenberg',  team:'Audi',         key:'hulkenberg'},
+  {abbr:'BOR',name:'Gabriel Bortoleto',team:'Audi',         key:'bortoleto'},
+  {abbr:'PER',name:'Sergio Perez',     team:'Cadillac',     key:'perez'},
+  {abbr:'BOT',name:'Valtteri Bottas',  team:'Cadillac',     key:'bottas'},
+];
+
+const ROSTER_BY_KEY  = Object.fromEntries(ROSTER.map(d => [d.key,  d]));
+const ROSTER_BY_ABBR = Object.fromEntries(ROSTER.map(d => [d.abbr, d]));
+
+function driverFromActual(entry) {
+  if (!entry) return null;
+  if (typeof entry === 'object') {
+    if (entry.abbr) return ROSTER_BY_ABBR[entry.abbr] || null;
+  }
+  return null;
+}
+
+function teamColor(team) {
+  return TEAM_COLORS[team] || '#5a7a8a';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DOM HELPERS
+// ═══════════════════════════════════════════════════════════════
+
+const $ = id => document.getElementById(id);
+const el = (tag, cls, html) => {
+  const e = document.createElement(tag);
+  if (cls)  e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+};
+
+// ═══════════════════════════════════════════════════════════════
+// CLOCK
+// ═══════════════════════════════════════════════════════════════
+
+function tickClock() {
+  const now = new Date();
+  const hh = String(now.getUTCHours()).padStart(2,'0');
+  const mm = String(now.getUTCMinutes()).padStart(2,'0');
+  const ss = String(now.getUTCSeconds()).padStart(2,'0');
+  $('clock').textContent = `${hh}:${mm}:${ss} UTC`;
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+// ═══════════════════════════════════════════════════════════════
+// DATE FORMATTING
+// ═══════════════════════════════════════════════════════════════
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function fmtDate(s) {
+  if (!s) return '—';
+  const [y, m, d] = s.split('-').map(Number);
+  return `${MONTHS[m-1]} ${String(d).padStart(2,'0')}`;
+}
+
+function today() {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER STANDINGS
+// ═══════════════════════════════════════════════════════════════
+
+function renderStandings(data) {
+  const { scores, counted } = calcStandings(data);
+  const sorted = Object.entries(scores).sort((a,b) => a[1] - b[1]);
+  const maxPts = sorted.length ? sorted[sorted.length - 1][1] : 1;
+  const minPts = sorted.length ? sorted[0][1] : 0;
+  const spread = maxPts - minPts || 1;
+
+  $('races-counted-badge').textContent = `${counted} / ${data.races.length}`;
+
+  // header stats
+  $('hdr-players').textContent = data.players.length;
+  $('hdr-rounds').textContent  = `${counted} / ${data.races.length}`;
+  if (sorted.length) {
+    $('hdr-leader').textContent = `${sorted[0][0].toLowerCase()}  (${sorted[0][1]}pts)`;
+  }
+
+  const nextRace = data.races.find(r => !r.actual_results?.length && r.date >= today());
+  if (nextRace) $('hdr-next').textContent = fmtDate(nextRace.date);
+
+  const body = $('standings-body');
+  if (!sorted.length) {
+    body.innerHTML = '<div class="no-data">no players yet</div>';
+    return;
+  }
+
+  let html = '';
+
+  // next-up banner
+  if (nextRace) {
+    html += `<div class="next-race-banner">
+      <span class="label" style="white-space:nowrap">NEXT UP</span>
+      <span class="name">${nextRace.name.replace(' Grand Prix', ' GP')}</span>
+      <span class="date">${fmtDate(nextRace.date)}</span>
+    </div>`;
+  }
+
+  html += `<table class="standings-table">
+    <thead><tr>
+      <th>#</th>
+      <th>Pilot</th>
+      <th style="text-align:right">Pts</th>
+      <th style="text-align:right">+/-</th>
+    </tr></thead>
+    <tbody>`;
+
+  sorted.forEach(([player, pts], i) => {
+    const rank   = i + 1;
+    const delta  = i === 0 ? '—' : `+${pts - sorted[0][1]}`;
+    const rankCls = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : '';
+    const fillCls = rank === 1 ? 'fill-1' : rank === 2 ? 'fill-2' : rank === 3 ? 'fill-3' : 'fill-n';
+    // bar width: leader is 100%, others are proportional based on inverted scale
+    const barPct = maxPts > 0 ? Math.round((pts / maxPts) * 100) : 0;
+
+    html += `<tr class="standings-row">
+      <td class="standings-rank ${rankCls}">${rank}</td>
+      <td class="standings-name">${escHtml(player)}</td>
+      <td class="standings-pts">${pts}</td>
+      <td class="standings-delta">${delta}</td>
+    </tr>
+    <tr class="standings-bar-wrap">
+      <td colspan="4" class="standings-bar-wrap" style="padding:0 4px 4px 28px">
+        <div class="standings-bar">
+          <div class="standings-bar-fill ${fillCls}" style="width:${barPct}%"></div>
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  html += `</tbody></table>`;
+
+  html += `<div class="scoring-note">
+    <p><span>✓ Match</span> = 0 pts</p>
+    <p><span>✗ Miss</span>  = +1 pt</p>
+    <p><span>No prediction</span> = +10 pts</p>
+    <p style="margin-top:4px">Lowest score wins.</p>
+  </div>`;
+
+  body.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER RACE LOG
+// ═══════════════════════════════════════════════════════════════
+
+let _selectedRaceIdx = null;
+
+function updatePredictButton() {
+  const btn = $('btn-predict');
+  if (!_gameData) return;
+  const hasOpen = _gameData.races.some(r => !r.actual_results?.length);
+  btn.disabled = !hasOpen;
+  btn.style.opacity = hasOpen ? '' : '0.35';
+  btn.title = hasOpen ? '' : 'No upcoming races';
+}
+
+function renderRaces(data) {
+  const t = today();
+  const nextIdx = data.races.findIndex(r => !r.actual_results?.length && r.date >= t);
+
+  const body = $('races-body');
+  let html = `<ul class="race-list">`;
+
+  data.races.forEach((race, i) => {
+    const hasResults = race.actual_results?.length > 0;
+    const isNext     = i === nextIdx;
+    const cls        = hasResults ? 'has-results' : isNext ? 'next-up' : 'upcoming';
+    const tag        = hasResults ? '<span class="race-tag done">COMPLETE</span>'
+                     : isNext     ? '<span class="race-tag next-up">NEXT UP</span>'
+                                  : '<span class="race-tag upcoming">SCHED</span>';
+    const name = race.name.replace(' Grand Prix', ' GP');
+
+    const delBtn = hasResults ? '' :
+      `<button class="race-delete-btn" title="Remove race" onclick="event.stopPropagation();deleteRace(${i})">✕</button>`;
+    html += `<li class="race-item ${cls}" data-idx="${i}" onclick="selectRace(${i})">
+      <span class="race-status-dot"></span>
+      <span class="race-name">${escHtml(name)}</span>
+      <span class="race-date">${fmtDate(race.date)}</span>
+      ${tag}
+      ${delBtn}
+    </li>`;
+  });
+
+  html += `</ul>`;
+  html += `<div class="add-race-form">
+    <input name="race-name" placeholder="Race name" maxlength="100"
+           onkeydown="if(event.key==='Enter')addRaceFromForm()" />
+    <input name="race-date" placeholder="YYYY-MM-DD" maxlength="10"
+           onkeydown="if(event.key==='Enter')addRaceFromForm()" />
+    <button onclick="addRaceFromForm()">+ ADD</button>
+  </div>`;
+  body.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER RACE DETAIL
+// ═══════════════════════════════════════════════════════════════
+
+let _gameData = null;
+
+function selectRace(idx) {
+  _selectedRaceIdx = idx;
+
+  document.querySelectorAll('.race-item').forEach(li => {
+    li.classList.toggle('selected', Number(li.dataset.idx) === idx);
+  });
+
+  const race    = _gameData.races[idx];
+  const players = _gameData.players;
+  const actual  = race.actual_results || [];
+
+  $('detail-placeholder').style.display = 'none';
+  $('panel-detail-inner').style.display  = 'flex';
+  $('detail-title').textContent = race.name;
+  $('detail-date').textContent  = fmtDate(race.date);
+
+  if (actual.length) {
+    renderCompletedRaceDetail(race, players, actual);
+  } else {
+    renderUpcomingRaceDetail(race, players, idx);
+  }
+}
+
+function renderCompletedRaceDetail(race, players, actual) {
+  // ── Score chips ───────────────────────────────────────────
+  const scoreMap = {};
+  for (const p of players) {
+    scoreMap[p] = race.predictions?.[p]
+      ? calcPlayerPoints(race.predictions[p], actual)
+      : 10;
+  }
+  const sortedPlayers = [...players].sort((a, b) => scoreMap[a] - scoreMap[b]);
+
+  let scoresHtml = '';
+  sortedPlayers.forEach((p, i) => {
+    const rankCls = i === 0 ? 'rank-first'
+      : (i === sortedPlayers.length - 1 && sortedPlayers.length > 1) ? 'rank-last'
+      : 'rank-second';
+    const noPred = !race.predictions?.[p];
+    scoresHtml += `<div class="detail-score-chip ${rankCls}">
+      <span class="player-name">${escHtml(p)}</span>
+      <span class="player-pts">${scoreMap[p]}</span>
+      <span class="player-rank">${noPred ? 'no pred' : `P${i+1} // ${scoreMap[p]}pt`}</span>
+    </div>`;
+  });
+  $('detail-scores').innerHTML = scoresHtml;
+
+  // ── Table header ──────────────────────────────────────────
+  let theadHtml = `<th style="width:28px">#</th><th>RESULT</th>`;
+  for (const p of players) {
+    theadHtml += `<th style="text-align:center">${escHtml(p.toUpperCase())}</th>`;
+  }
+  $('detail-thead-row').innerHTML = theadHtml;
+
+  // ── Table body ────────────────────────────────────────────
+  let tbodyHtml = '';
+  const n = Math.max(actual.length, 10);
+  for (let i = 0; i < n; i++) {
+    const act    = i < actual.length ? actual[i] : null;
+    const driver = driverFromActual(act);
+    const color  = driver ? teamColor(driver.team) : '#5a7a8a';
+
+    let actualCell = '';
+    if (act) {
+      const name = typeof act === 'object' ? act.name : String(act);
+      const abbr = typeof act === 'object' ? act.abbr : '';
+      actualCell = `<span class="team-dot" style="background:${color}"></span>
+        <span class="actual-driver">${escHtml(name)}</span>
+        ${abbr ? `<span class="actual-abbr">${escHtml(abbr)}</span>` : ''}`;
+    } else {
+      actualCell = `<span class="dim">—</span>`;
+    }
+
+    let rowHtml = `<td class="pos-num">${i+1}</td><td>${actualCell}</td>`;
+    for (const p of players) {
+      const pred = race.predictions?.[p]?.[i] ?? null;
+      if (!race.predictions?.[p]) {
+        rowHtml += `<td class="pred-cell no-pred"><span class="dim">—</span></td>`;
+      } else if (pred === null) {
+        rowHtml += `<td class="pred-cell no-pred"><span class="dim">—</span></td>`;
+      } else {
+        const pts  = scorePosition(pred, act);
+        const cls  = pts === 0 ? 'match' : 'miss';
+        const tick = pts === 0 ? '✓' : '✗';
+        rowHtml += `<td class="pred-cell ${cls}">
+          <span class="pred-tick">${tick}</span><span class="pred-key">${escHtml(pred)}</span>
+        </td>`;
+      }
+    }
+    tbodyHtml += `<tr>${rowHtml}</tr>`;
+  }
+  $('detail-tbody').innerHTML = tbodyHtml;
+}
+
+function renderUpcomingRaceDetail(race, players, raceIdx) {
+  const preds = race.predictions || {};
+  const hasPreds = Object.keys(preds).length > 0;
+
+  // ── Status chips + CTA ────────────────────────────────────
+  let headerHtml = '';
+  for (const p of players) {
+    const sub = !!preds[p];
+    headerHtml += `<div class="pending-chip ${sub ? 'submitted' : 'missing'}">
+      <span class="pc-name">${escHtml(p)}</span>
+      <span class="pc-status">${sub ? '✓ READY' : '○ OPEN'}</span>
+    </div>`;
+  }
+  headerHtml += `<button class="pending-cta" onclick="openPredictForRace(${raceIdx})">→ ENTER PREDICTION</button>`;
+  headerHtml += `<button class="pending-cta pending-cta-results" onclick="openResultsModal(${raceIdx})">⊕ ENTER RESULTS</button>`;
+  // Auto-fetch button — only for past races (date has already passed)
+  if (race.date && race.date < today()) {
+    headerHtml += `<button class="pending-cta" id="btn-auto-fetch" onclick="autoFetchResults(${raceIdx})">⟳ AUTO-FETCH</button>`;
+  }
+  $('detail-scores').innerHTML = headerHtml;
+
+  // ── Table: submitted predictions only ─────────────────────
+  $('detail-thead-row').innerHTML = '';
+  $('detail-tbody').innerHTML = '';
+
+  if (!hasPreds) {
+    $('detail-tbody').innerHTML = `<tr><td colspan="10" class="no-data" style="padding:20px">
+      No predictions submitted yet for this race.
+    </td></tr>`;
+    return;
+  }
+
+  const submittedPlayers = players.filter(p => preds[p]);
+  let theadHtml = `<th style="width:28px">#</th>`;
+  for (const p of submittedPlayers) {
+    theadHtml += `<th style="text-align:center">${escHtml(p.toUpperCase())}</th>`;
+  }
+  $('detail-thead-row').innerHTML = theadHtml;
+
+  let tbodyHtml = '';
+  for (let i = 0; i < 10; i++) {
+    let rowHtml = `<td class="pending-pos">${i+1}</td>`;
+    for (const p of submittedPlayers) {
+      const key    = preds[p]?.[i] ?? null;
+      const driver = key ? ROSTER_BY_KEY[key] : null;
+      const color  = driver ? teamColor(driver.team) : null;
+      if (key) {
+        const surname = driver ? driver.name.split(' ').pop() : key;
+        rowHtml += `<td class="pred-cell" style="text-align:center">
+          ${color ? `<span class="team-dot" style="background:${color}"></span>` : ''}
+          <span class="pending-key">${escHtml(surname)}</span>
+        </td>`;
+      } else {
+        rowHtml += `<td class="pred-cell no-pred"><span class="dim">—</span></td>`;
+      }
+    }
+    tbodyHtml += `<tr>${rowHtml}</tr>`;
+  }
+  $('detail-tbody').innerHTML = tbodyHtml;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UTIL
+// ═══════════════════════════════════════════════════════════════
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BOOTSTRAP
+// ═══════════════════════════════════════════════════════════════
+
+async function init() {
+  try {
+    const [dataRes, aliasRes] = await Promise.all([fetch('/data'), fetch('/aliases')]);
+    if (!dataRes.ok) throw new Error(`HTTP ${dataRes.status}`);
+    const data    = await dataRes.json();
+    const aliases = aliasRes.ok ? await aliasRes.json() : {};
+    // Merge server aliases into local dict so they stay in sync with scoring.py
+    Object.assign(ALIASES, aliases);
+    _gameData = data;
+
+    // hide loading, show app
+    $('loading-screen').style.display = 'none';
+    $('app').style.display = 'flex';
+
+    renderStandings(data);
+    renderRaces(data);
+    updatePredictButton();
+
+    // auto-select the most recent completed race
+    const lastDone = [...data.races].reverse().find(r => r.actual_results?.length > 0);
+    if (lastDone) {
+      const idx = data.races.indexOf(lastDone);
+      selectRace(idx);
+    }
+
+  } catch (err) {
+    $('loading-screen').innerHTML = `
+      <div class="loading-glyph" style="animation:none;color:var(--red)">!</div>
+      <div class="loading-label" style="color:var(--red)">Telemetry feed error</div>
+      <div class="error-msg">${escHtml(String(err))}</div>
+      <div class="error-hint">Make sure the server is running: <code>uv run web/server.py</code></div>
+    `;
+  }
+}
+
+init();
+
+// ═══════════════════════════════════════════════════════════════
+// PREDICT MODAL
+// ═══════════════════════════════════════════════════════════════
+
+let _modal = { step: 1, player: null, race: null, slots: Array(10).fill(null), mode: 'prediction' };
+
+function openPredictModal() {
+  _modal = { step: 1, player: null, race: null, slots: Array(10).fill(null), addingPlayer: false, newPlayerName: '', mode: 'prediction', isEdit: false };
+  $('predict-modal').style.display = 'flex';
+  renderModalStep();
+}
+
+async function addRaceFromForm() {
+  const nameEl = document.querySelector('.add-race-form input[name="race-name"]');
+  const dateEl = document.querySelector('.add-race-form input[name="race-date"]');
+  const name = nameEl?.value.trim();
+  const date = dateEl?.value.trim() || '';
+  if (!name) { showToast('Race name is required.', true); return; }
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) { showToast('Date must be YYYY-MM-DD.', true); return; }
+  try {
+    const res = await fetch('/races', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, date }),
+    });
+    const body = await res.json();
+    if (!res.ok || body.error) throw new Error(body.error || `HTTP ${res.status}`);
+    showToast(`"${name}" added.`);
+    await _refreshDashboard();
+  } catch (err) {
+    showToast(String(err.message || err), true);
+  }
+}
+
+async function autoFetchResults(raceIdx) {
+  const race = _gameData.races[raceIdx];
+  const btn = $('btn-auto-fetch');
+  if (btn) { btn.disabled = true; btn.textContent = '⟳ FETCHING…'; }
+  try {
+    const res = await fetch('/races/fetch-results', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ race_name: race.name }),
+    });
+    const body = await res.json();
+    if (!res.ok || body.error) throw new Error(body.error || `HTTP ${res.status}`);
+    showToast(`Results fetched for ${race.name} (${body.count} drivers).`);
+    await _refreshDashboard();
+  } catch (err) {
+    showToast(String(err.message || err), true);
+    if (btn) { btn.disabled = false; btn.textContent = '⟳ AUTO-FETCH'; }
+  }
+}
+
+async function deleteRace(idx) {
+  const race = _gameData.races[idx];
+  if (!confirm(`Remove "${race.name}" from the schedule?\n\nThis cannot be undone.`)) return;
+  try {
+    const res = await fetch('/races', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ race_name: race.name }),
+    });
+    const body = await res.json();
+    if (!res.ok || body.error) throw new Error(body.error || `HTTP ${res.status}`);
+    showToast(`"${race.name}" removed.`);
+    await _refreshDashboard();
+  } catch (err) {
+    showToast(String(err.message || err), true);
+  }
+}
+
+function openPredictForRace(raceIdx) {
+  const race = _gameData.races[raceIdx];
+  if (race.actual_results?.length) { showToast('Results already entered — predictions closed.', true); return; }
+  _modal = { step: 1, player: null, race, slots: Array(10).fill(null), addingPlayer: false, newPlayerName: '', mode: 'prediction', isEdit: false };
+  $('predict-modal').style.display = 'flex';
+  renderModalStep();
+}
+
+function openResultsModal(raceIdx) {
+  const race = _gameData.races[raceIdx];
+  if (race.actual_results?.length) { showToast('Results already entered for this race.', true); return; }
+  _modal = { step: 1, player: null, race, slots: Array(10).fill(null), addingPlayer: false, newPlayerName: '', mode: 'results' };
+  $('predict-modal').style.display = 'flex';
+  renderModalStep();
+}
+
+function closePredictModal() {
+  $('predict-modal').style.display = 'none';
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closePredictModal();
+});
+
+function renderModalStep() {
+  const s = _modal.step;
+
+  const isResults = _modal.mode === 'results';
+
+  for (let i = 1; i <= 3; i++) {
+    const ind = $(`step-ind-${i}`);
+    if (isResults) {
+      ind.style.display = i <= 2 ? '' : 'none';
+      ind.className = 'modal-step-ind' + (i === s ? ' active' : i < s ? ' done' : '');
+    } else {
+      ind.style.display = '';
+      ind.className = 'modal-step-ind' + (i === s ? ' active' : i < s ? ' done' : '');
+    }
+  }
+
+  const back = $('modal-back');
+  const next = $('modal-next');
+
+  if (isResults) {
+    back.style.display = 'none';
+    next.textContent = s < 2 ? 'SELECT →' : 'SUBMIT ✓';
+    if (s === 1) {
+      $('modal-title').textContent = 'Step 01 // Select Race';
+      $('modal-body').innerHTML = renderStepRaceResults();
+      next.disabled = !_modal.race;
+    } else {
+      $('modal-title').textContent = 'Step 02 // Enter Results — P1–P10';
+      $('modal-body').innerHTML = renderStepPicker();
+      next.disabled = _modal.slots.some(k => k === null);
+    }
+    return;
+  }
+
+  back.style.display = s > 1 ? '' : 'none';
+  next.textContent = s < 3 ? 'SELECT →' : 'SUBMIT ✓';
+
+  if (s === 1) {
+    $('modal-title').textContent = 'Step 01 // Select Pilot';
+    $('modal-body').innerHTML = renderStepPlayer();
+    next.disabled = !_modal.player;
+  } else if (s === 2) {
+    $('modal-title').textContent = 'Step 02 // Select Race';
+    $('modal-body').innerHTML = renderStepRace();
+    next.disabled = !_modal.race;
+  } else {
+    $('modal-title').textContent = _modal.isEdit
+      ? 'Step 03 // Edit Prediction — P1–P10'
+      : 'Step 03 // Build Prediction — P1–P10';
+    $('modal-body').innerHTML = renderStepPicker();
+    next.disabled = _modal.slots.some(k => k === null);
+  }
+}
+
+function renderStepPlayer() {
+  if (!_gameData) return '<div class="no-data">no data loaded</div>';
+  let html = '<div class="player-grid">';
+  for (const p of _gameData.players) {
+    const sel = _modal.player === p ? ' selected' : '';
+    html += `<div class="player-tile${sel}" onclick="selectModalPlayer('${escHtml(p)}')">${escHtml(p)}</div>`;
+  }
+  // "+ NEW PILOT" tile
+  const newSel = _modal.addingPlayer ? ' selected' : '';
+  html += `<div class="player-tile${newSel}" onclick="toggleNewPlayer()" style="border-style:dashed;font-size:11px;color:var(--text-dim)">+ NEW PILOT</div>`;
+  html += '</div>';
+
+  if (_modal.addingPlayer) {
+    html += `<div class="new-player-form">
+      <input id="new-player-input" class="pilot-input" type="text" maxlength="30"
+        placeholder="callsign (lowercase)" value="${escHtml(_modal.newPlayerName)}"
+        oninput="_modal.newPlayerName=this.value.trim().toLowerCase()"
+        onkeydown="if(event.key==='Enter')confirmNewPlayer()" />
+      <button class="btn btn-primary" onclick="confirmNewPlayer()">ADD</button>
+    </div>`;
+  }
+  return html;
+}
+
+function selectModalPlayer(name) {
+  _modal.player = name;
+  _modal.addingPlayer = false;
+  renderModalStep();
+}
+
+function toggleNewPlayer() {
+  _modal.addingPlayer = !_modal.addingPlayer;
+  _modal.player = _modal.addingPlayer ? null : _modal.player;
+  renderModalStep();
+  if (_modal.addingPlayer) setTimeout(() => { const el = $('new-player-input'); if (el) el.focus(); }, 0);
+}
+
+async function confirmNewPlayer() {
+  const name = _modal.newPlayerName;
+  if (!name) return;
+  const next = $('modal-next');
+  next.disabled = true;
+  try {
+    const res  = await fetch('/players', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
+    const body = await res.json();
+    if (!res.ok || body.error) throw new Error(body.error || `HTTP ${res.status}`);
+
+    // Refresh player list and auto-select the new player
+    const dataRes = await fetch('/data');
+    _gameData = await dataRes.json();
+    renderStandings(_gameData);
+    renderRaces(_gameData);
+    updatePredictButton();
+
+    _modal.player = body.name;
+    _modal.addingPlayer = false;
+    _modal.newPlayerName = '';
+    renderModalStep();
+    showToast(`Pilot '${body.name}' added.`);
+  } catch (err) {
+    showToast(String(err.message || err), true);
+  } finally {
+    next.disabled = !_modal.player;
+  }
+}
+
+function renderStepRace() {
+  if (!_gameData) return '<div class="no-data">no data loaded</div>';
+  const upcoming = _gameData.races.filter(r => !r.actual_results?.length);
+  if (!upcoming.length) return '<div class="no-data">no upcoming races</div>';
+
+  let html = '<ul class="race-select-list">';
+  for (const race of upcoming) {
+    const idx     = _gameData.races.indexOf(race);
+    const hasPred = !!(race.predictions?.[_modal.player]);
+    const isSel   = _modal.race === race;
+    const selCls  = isSel   ? ' selected' : '';
+    // Predicted races are still clickable — clicking opens the edit flow
+    const badge = hasPred
+      ? '<span class="race-select-badge predicted">PREDICTED — EDIT</span>'
+      : '<span class="race-select-badge open">OPEN</span>';
+    html += `<li class="race-select-item${selCls}" onclick="selectModalRace(${idx})">
+      <span class="race-select-name">${escHtml(race.name)}</span>
+      <span class="race-select-date">${fmtDate(race.date)}</span>
+      ${badge}
+    </li>`;
+  }
+  html += '</ul>';
+  return html;
+}
+
+function selectModalRace(idx) {
+  const race = _gameData.races[idx];
+  _modal.race = race;
+  // Pre-fill slots when editing an existing prediction so the user can see
+  // what they already picked and change individual drivers rather than
+  // rebuilding from scratch.
+  const existing = race.predictions?.[_modal.player];
+  if (existing) {
+    _modal.slots = [...existing.slice(0, 10), ...Array(Math.max(0, 10 - existing.length)).fill(null)];
+    _modal.isEdit = true;
+  } else {
+    _modal.slots = Array(10).fill(null);
+    _modal.isEdit = false;
+  }
+  renderModalStep();
+}
+
+function renderStepRaceResults() {
+  if (!_gameData) return '<div class="no-data">no data loaded</div>';
+  const open = _gameData.races.filter(r => !r.actual_results?.length);
+  if (!open.length) return '<div class="no-data">no races awaiting results</div>';
+
+  let html = '<ul class="race-select-list">';
+  for (const race of open) {
+    const idx   = _gameData.races.indexOf(race);
+    const isSel = _modal.race === race;
+    html += `<li class="race-select-item${isSel ? ' selected' : ''}" onclick="selectModalRace(${idx})">
+      <span class="race-select-name">${escHtml(race.name)}</span>
+      <span class="race-select-date">${fmtDate(race.date)}</span>
+      <span class="race-select-badge open">OPEN</span>
+    </li>`;
+  }
+  html += '</ul>';
+  return html;
+}
+
+function renderStepPicker() {
+  const selected = new Set(_modal.slots.filter(Boolean));
+  const filled   = selected.size;
+
+  // Group roster by team preserving order
+  const teamOrder = [];
+  const teamDrivers = {};
+  for (const d of ROSTER) {
+    if (!teamDrivers[d.team]) { teamOrder.push(d.team); teamDrivers[d.team] = []; }
+    teamDrivers[d.team].push(d);
+  }
+
+  // Slots column
+  let slotsHtml = '<div class="slots-col">';
+  for (let i = 0; i < 10; i++) {
+    const key    = _modal.slots[i];
+    const driver = key ? ROSTER_BY_KEY[key] : null;
+    if (driver) {
+      const color = teamColor(driver.team);
+      slotsHtml += `<div class="slot-item filled" onclick="removeFromSlot(${i})" title="Click to remove">
+        <span class="slot-num">P${i+1}</span>
+        <span class="team-dot" style="background:${color}"></span>
+        <span class="slot-name">${escHtml(driver.name.split(' ').pop())}</span>
+      </div>`;
+    } else {
+      slotsHtml += `<div class="slot-item">
+        <span class="slot-num">P${i+1}</span>
+        <span class="slot-empty">— empty</span>
+      </div>`;
+    }
+  }
+  slotsHtml += `<div class="slots-count">${filled}/10 selected</div></div>`;
+
+  // Driver grid
+  let driversHtml = '<div class="drivers-col">';
+  for (const team of teamOrder) {
+    const color = teamColor(team);
+    driversHtml += `<div class="team-group">
+      <div class="team-group-label" style="border-color:${color}">${escHtml(team)}</div>
+      <div class="driver-btn-row">`;
+    for (const d of teamDrivers[team]) {
+      const dis     = selected.has(d.key) ? ' disabled' : '';
+      const surname = escHtml(d.name.split(' ').pop() || d.abbr);
+      driversHtml += `<button class="driver-btn"${dis} onclick="addToSlot('${d.key}')" title="${escHtml(d.abbr)} — ${escHtml(d.name)}">${surname}</button>`;
+    }
+    driversHtml += '</div></div>';
+  }
+  driversHtml += '</div>';
+
+  return `<div class="picker-layout">${slotsHtml}${driversHtml}</div>`;
+}
+
+function addToSlot(key) {
+  const idx = _modal.slots.indexOf(null);
+  if (idx === -1) return;
+  _modal.slots[idx] = key;
+  renderModalStep();
+}
+
+function removeFromSlot(i) {
+  _modal.slots[i] = null;
+  // Compact: shift filled slots to the front
+  const keys = _modal.slots.filter(Boolean);
+  _modal.slots = [...keys, ...Array(10 - keys.length).fill(null)];
+  renderModalStep();
+}
+
+function modalBack() {
+  if (_modal.step > 1) { _modal.step--; renderModalStep(); }
+}
+
+function modalNext() {
+  const maxStep = _modal.mode === 'results' ? 2 : 3;
+  if (_modal.step < maxStep) { _modal.step++; renderModalStep(); }
+  else if (_modal.mode === 'results') submitResults();
+  else submitPrediction();
+}
+
+function _startSubmit(btn) {
+  btn.disabled = true;
+  btn.textContent = 'SUBMITTING';
+  btn.classList.add('btn-submitting');
+}
+
+function _endSubmit(btn, label = 'SUBMIT ✓') {
+  btn.disabled = false;
+  btn.textContent = label;
+  btn.classList.remove('btn-submitting');
+}
+
+async function _refreshDashboard() {
+  const fresh = await fetch('/data');
+  _gameData = await fresh.json();
+  renderStandings(_gameData);
+  renderRaces(_gameData);
+  updatePredictButton();
+  if (_selectedRaceIdx !== null) selectRace(_selectedRaceIdx);
+}
+
+async function submitPrediction() {
+  const next = $('modal-next');
+  _startSubmit(next);
+
+  try {
+    const res = await fetch('/predictions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        player: _modal.player,
+        race_name: _modal.race.name,
+        prediction: _modal.slots,
+        overwrite: !!_modal.isEdit,
+      }),
+    });
+    let body;
+    try { body = await res.json(); } catch { throw new Error(`Server error (HTTP ${res.status}) — try restarting the server`); }
+    if (!res.ok || body.error) throw new Error(body.error || `HTTP ${res.status}`);
+
+    closePredictModal();
+    showToast(_modal.isEdit ? 'Prediction updated.' : 'Prediction saved.');
+    await _refreshDashboard();
+
+  } catch (err) {
+    showToast(String(err.message || err), true);
+    _endSubmit(next);
+  }
+}
+
+async function submitResults() {
+  const next = $('modal-next');
+  _startSubmit(next);
+
+  try {
+    // Build result entries from slots using the ROSTER
+    const results = _modal.slots.map(key => {
+      const d = ROSTER_BY_KEY[key];
+      return { name: d ? d.name : key, abbr: d ? d.abbr : key.toUpperCase() };
+    });
+
+    const res = await fetch('/results', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ race_name: _modal.race.name, results }),
+    });
+    let body;
+    try { body = await res.json(); } catch { throw new Error(`Server error (HTTP ${res.status}) — try restarting the server`); }
+
+    if (res.status === 409) {
+      _endSubmit(next);
+      showToast('Results already entered for this race.', true);
+      closePredictModal();
+      return;
+    }
+    if (!res.ok || body.error) throw new Error(body.error || `HTTP ${res.status}`);
+
+    closePredictModal();
+    showToast(`Results saved for ${_modal.race.name}.`);
+    await _refreshDashboard();
+
+  } catch (err) {
+    showToast(String(err.message || err), true);
+    _endSubmit(next);
+  }
+}
+
+function showToast(msg, isError = false) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = isError ? 'error' : '';
+  void t.offsetWidth; // reflow to restart transition
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>

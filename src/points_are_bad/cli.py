@@ -16,7 +16,7 @@ import sys
 from typing import TYPE_CHECKING, TypeVar
 
 from .api import HAS_FASTF1, fetch_results, get_schedule_updates
-from .drivers import ROSTER
+from .drivers import ROSTER, by_key
 from .scoring import calculate_player_points_for_race, calculate_season_standings, score_position
 from .storage import load_data, save_data
 
@@ -187,7 +187,7 @@ def auto_update_past_races(data: GameData) -> None:
             fetched = fetch_results(year, race["name"])
 
             if fetched:
-                race["actual_results"] = fetched  # type: ignore[typeddict-item]
+                race["actual_results"] = fetched
                 updated = True
                 print(f"  ✓  Results saved for {race['name']}\n")
             else:
@@ -324,10 +324,19 @@ def manage_races(data: GameData) -> None:
 
         if choice == "1":
             name = input("\n  Race name (e.g. 'Bahrain GP'): ").strip()
+            if not name:
+                input("  Name cannot be empty. Press Enter...")
+                continue
             if any(r["name"].lower() == name.lower() for r in data["races"]):
                 print("  Race already exists.")
-            elif name:
+            else:
                 date_str = input("  Date (YYYY-MM-DD) or leave blank: ").strip()
+                if date_str:
+                    try:
+                        datetime.datetime.strptime(date_str, "%Y-%m-%d")
+                    except ValueError:
+                        input("  Invalid date format — use YYYY-MM-DD. Press Enter...")
+                        continue
                 data["races"].append(
                     {
                         "name": name,
@@ -336,21 +345,24 @@ def manage_races(data: GameData) -> None:
                         "predictions": {},
                     }
                 )
+                # Keep races sorted by date (dateless races sort to the end)
+                data["races"].sort(key=lambda r: r.get("date") or "9999-12-31")
                 save_data(data)
                 print(f"  ✓  '{name}' added.")
             input("  Press Enter to continue...")
         elif choice == "2":
-            name = input("\n  Race name to remove: ").strip()
-            found = False
-            for r in data["races"]:
-                if r["name"].lower() == name.lower():
-                    data["races"].remove(r)
+            if not data["races"]:
+                input("\n  No races to remove. Press Enter...")
+                continue
+            race = select_item(data["races"], "race to remove", lambda r: r["name"])
+            if race:
+                confirm = input(f"\n  Remove '{race['name']}'? (y/n): ").strip().lower()
+                if confirm == "y":
+                    data["races"].remove(race)
                     save_data(data)
-                    print(f"  ✓  '{r['name']}' removed.")
-                    found = True
-                    break
-            if not found:
-                print("  Race not found.")
+                    print(f"  ✓  '{race['name']}' removed.")
+                else:
+                    print("  Cancelled.")
             input("  Press Enter to continue...")
         elif choice == "3":
             _auto_populate_schedule(data)
@@ -415,12 +427,25 @@ def _render_driver_list(roster: list[DriverInfo], picked: list[DriverInfo]) -> N
             print(f"  [{i + 1:>2}]  {d['abbr']}  {d['name']:<22}  {d['team']}")
 
 
-def _build_prediction(race_name: str, player: str) -> list[str] | None:
+def _build_prediction(
+    race_name: str,
+    player: str,
+    prefill: list[str] | None = None,
+) -> list[str] | None:
     """Interactive driver-select loop.  Returns the prediction as a list of
     canonical driver keys, or None if the user cancels.
+
+    Pass *prefill* (a list of driver keys from an existing prediction) to
+    pre-populate the picker when editing rather than starting from scratch.
     """
     roster = ROSTER  # module-level list; can be narrowed in future
+    # Seed picked from an existing prediction (edit flow).
     picked: list[DriverInfo] = []
+    if prefill:
+        for key in prefill:
+            driver = by_key(key)
+            if driver and driver not in picked:
+                picked.append(driver)
 
     while True:
         # --- Selection loop: keep picking until 10 chosen or user exits ---
@@ -536,19 +561,35 @@ def enter_predictions(data: GameData) -> None:
     if not player:
         return
 
-    if player in race["predictions"]:
-        print(f"\n  WARNING: {player} already has a prediction for {race['name']}.")
-        if input("  Overwrite? (y/n): ").strip().lower() != "y":
+    existing = race["predictions"].get(player)
+    if existing:
+        clear_screen()
+        _header(f"Edit Prediction  –  {player}", race["name"])
+        print()
+        _rule("Current prediction")
+        for j, key in enumerate(existing):
+            d = by_key(key)
+            if d:
+                print(f"  P{j + 1:>2}  {d['abbr']}  {d['name']}")
+            else:
+                print(f"  P{j + 1:>2}  ???  {key}")
+        print()
+        answer = input("  [e] Edit  [c] Cancel: ").strip().lower()
+        if answer != "e":
             return
+        prefill: list[str] | None = existing
+    else:
+        prefill = None
 
-    prediction = _build_prediction(race["name"], player)
+    prediction = _build_prediction(race["name"], player, prefill=prefill)
     if prediction is None:
         input("\n  Prediction cancelled. Press Enter...")
         return
 
     race["predictions"][player] = prediction
     save_data(data)
-    input(f"\n  ✓  Prediction for {player} saved. Press Enter...")
+    action = "updated" if existing else "saved"
+    input(f"\n  ✓  Prediction for {player} {action}. Press Enter...")
 
 
 # ---------------------------------------------------------------------------
@@ -594,7 +635,7 @@ def enter_results(data: GameData) -> None:
                 for i, d in enumerate(fetched):
                     print(f"    {i + 1:>2}.  {d['name']}")
                 if input("\n  Save these results? (y/n): ").strip().lower() == "y":
-                    race["actual_results"] = fetched  # type: ignore[typeddict-item]
+                    race["actual_results"] = fetched
                     save_data(data)
                     input(f"\n  ✓  Results for {race['name']} saved. Press Enter...")
                     return
@@ -607,7 +648,7 @@ def enter_results(data: GameData) -> None:
     print("  The system ignores case — use any consistent name format.")
 
     actual = get_input_list("Top 10:", max_items=10)
-    race["actual_results"] = actual  # type: ignore[typeddict-item]
+    race["actual_results"] = [{"name": s, "abbr": ""} for s in actual]
     save_data(data)
     input(f"\n  ✓  Results for {race['name']} saved. Press Enter...")
 
