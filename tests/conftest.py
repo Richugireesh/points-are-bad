@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 def sample_data() -> GameData:
     """Minimal GameData with two players, one completed race, one upcoming."""
     return {
-        "players": ["Alice", "Bob"],
+        "players": ["alice", "bob"],
         "races": [
             {
                 "name": "Bahrain Grand Prix",
@@ -24,8 +24,8 @@ def sample_data() -> GameData:
                     {"abbr": "NOR", "name": "Lando Norris"},
                 ],
                 "predictions": {
-                    "Alice": ["verstappen", "norris"],
-                    "Bob": ["norris", "verstappen"],
+                    "alice": ["verstappen", "norris"],
+                    "bob": ["norris", "verstappen"],
                 },
             },
             {

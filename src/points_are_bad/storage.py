@@ -21,8 +21,9 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import shutil
 import tempfile
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .exceptions import StorageError
 
@@ -42,7 +43,7 @@ _SCHEMA_VERSION = 1
 # Migration
 # ---------------------------------------------------------------------------
 
-def _migrate(raw: dict) -> GameData:
+def _migrate(raw: dict[str, Any]) -> GameData:
     """Upgrade *raw* JSON (any version) to the current schema in-place.
 
     Safe to call on already-current data — a no-op when ``raw["version"]``
@@ -80,7 +81,7 @@ def load_data() -> GameData:
     """
     path = pathlib.Path(DATA_FILE)
     if not path.exists():
-        default: GameData = {"players": [], "races": [], "version": _SCHEMA_VERSION}  # type: ignore[typeddict-unknown-key]
+        default: GameData = {"players": [], "races": [], "version": _SCHEMA_VERSION}
         save_data(default)
         return default
     try:
@@ -106,9 +107,11 @@ def save_data(data: GameData) -> None:
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 json.dump(data, fh, indent=4, ensure_ascii=False)
-        except Exception:
+        except Exception as e:
             os.unlink(tmp_name)
-            raise
+            raise StorageError(
+                f"Could not write data file '{DATA_FILE}': {e}"
+            ) from e
 
         # 2. Rotate backups (ignore missing files — first run has none)
         _rotate_backups(path)
@@ -141,5 +144,4 @@ def _rotate_backups(path: pathlib.Path) -> None:
         bak[0].replace(bak[1])
     if path.exists():
         # Copy (not rename) so the live file persists until the atomic replace
-        import shutil
         shutil.copy2(path, bak[0])

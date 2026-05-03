@@ -190,3 +190,8 @@ class TestStorageErrors:
         monkeypatch.setattr(storage_module, "DATA_FILE", bad_path)
         with pytest.raises(StorageError, match="Could not write"):
             save_data({"players": [], "races": []})
+
+    def test_save_raises_on_non_serializable_data(self, isolated_data_file):
+        payload: dict = {"players": ["alice"], "races": [], "bad": object()}
+        with pytest.raises(StorageError, match="Could not write"):
+            save_data(payload)  # type: ignore[arg-type]

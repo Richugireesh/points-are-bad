@@ -16,13 +16,14 @@ from __future__ import annotations
 
 import datetime
 import functools
+import hmac
 import json
 import logging
 import os
 import pathlib
 import sys
 import threading
-from typing import Callable, TypeVar, Union
+from typing import Callable, Optional, TypeVar, Union
 
 from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_limiter import Limiter
@@ -40,6 +41,10 @@ from points_are_bad.scoring import ALIASES
 from points_are_bad.storage import load_data, save_data
 
 _VALID_DRIVER_KEYS: frozenset[str] = frozenset(d["key"] for d in _ROSTER)
+
+
+def _find_race(game: dict, race_name: str) -> Optional[dict]:
+    return next((r for r in game["races"] if r["name"] == race_name), None)
 
 ROOT = pathlib.Path(__file__).parent.parent
 WEB_DIR = pathlib.Path(__file__).parent
@@ -87,7 +92,7 @@ _RouteReturn = Union[Response, tuple[Response, int]]
 _F = TypeVar("_F", bound=Callable[..., _RouteReturn])
 
 # Shared secret for write endpoints.  None → open (dev only).
-_API_TOKEN: str | None = os.environ.get("API_TOKEN") or None
+_API_TOKEN: Optional[str] = os.environ.get("API_TOKEN") or None
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +103,7 @@ def _err(msg: str, code: int = 400) -> tuple[Response, int]:
     return jsonify({"error": msg}), code  # type: ignore[return-value]
 
 
-def _validate_date(value: str) -> str | None:
+def _validate_date(value: str) -> Optional[str]:
     """Return *value* unchanged if it is a valid YYYY-MM-DD string, else ``None``."""
     try:
         datetime.date.fromisoformat(value)
@@ -113,7 +118,8 @@ def _require_token(fn: _F) -> _F:
     def wrapper(*args, **kwargs):  # type: ignore[no-untyped-def]
         if _API_TOKEN is not None:
             auth = request.headers.get("Authorization", "")
-            if not auth.startswith("Bearer ") or auth[len("Bearer "):] != _API_TOKEN:
+            token = auth[len("Bearer "):] if auth.startswith("Bearer ") else ""
+            if not hmac.compare_digest(token, _API_TOKEN):
                 log.warning("Unauthorized write attempt from %s", request.remote_addr)
                 return _err("Unauthorized", 401)
         return fn(*args, **kwargs)
@@ -196,10 +202,11 @@ def save_prediction() -> _RouteReturn:
     with _data_lock:
         game = load_data()
 
+        player = player.lower()
         if player not in game["players"]:
             return _err(f"Unknown player: {player}")
 
-        race = next((r for r in game["races"] if r["name"] == race_name), None)
+        race = _find_race(game, race_name)
         if race is None:
             return _err(f"Unknown race: {race_name}")
 
@@ -250,7 +257,7 @@ def save_results() -> _RouteReturn:
     with _data_lock:
         game = load_data()
 
-        race = next((r for r in game["races"] if r["name"] == race_name), None)
+        race = _find_race(game, race_name)
         if race is None:
             return _err(f"Unknown race: {race_name}")
 
@@ -280,7 +287,7 @@ def fetch_race_results() -> _RouteReturn:
     with _data_lock:
         game = load_data()
 
-        race = next((r for r in game["races"] if r["name"] == race_name), None)
+        race = _find_race(game, race_name)
         if race is None:
             return _err(f"Unknown race: {race_name}", 404)
 
@@ -354,7 +361,7 @@ def delete_race() -> _RouteReturn:
     with _data_lock:
         game = load_data()
 
-        race = next((r for r in game["races"] if r["name"] == race_name), None)
+        race = _find_race(game, race_name)
         if race is None:
             return _err(f"Unknown race: {race_name}", 404)
 
@@ -391,6 +398,33 @@ def add_player() -> _RouteReturn:
 
     log.info("Player added: %s", name)
     return jsonify({"ok": True, "name": name})
+
+
+@app.route("/players", methods=["DELETE"])
+@limiter.limit("20 per hour; 5 per minute")
+@_require_token
+def remove_player() -> _RouteReturn:
+    body = request.get_json(force=True, silent=True) or {}
+    name: str = str(body.get("name", "")).strip().lower()
+
+    if not name:
+        return _err("Player name is required")
+
+    with _data_lock:
+        game = load_data()
+
+        if name not in game["players"]:
+            return _err(f"Unknown player: {name}", 404)
+
+        # Remove all predictions by this player from all races
+        for race in game["races"]:
+            race["predictions"].pop(name, None)
+
+        game["players"].remove(name)
+        save_data(game)
+
+    log.info("Player removed: %s", name)
+    return jsonify({"ok": True})
 
 
 # ── Entry point ─────────────────────────────────────────────────────────────

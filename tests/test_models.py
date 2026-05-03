@@ -7,7 +7,10 @@ expected keys are present.
 
 from __future__ import annotations
 
-from points_are_bad.models import DriverInfo, DriverResult, GameData, RaceData
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from points_are_bad.models import DriverInfo, DriverResult, GameData, RaceData
 
 
 class TestDriverResult:
@@ -33,10 +36,10 @@ class TestRaceData:
             "name": "Bahrain Grand Prix",
             "date": "2026-03-01",
             "actual_results": [{"abbr": "VER", "name": "Max Verstappen"}],
-            "predictions": {"Alice": ["verstappen"]},
+            "predictions": {"alice": ["verstappen"]},
         }
         assert len(race["actual_results"]) == 1
-        assert race["predictions"]["Alice"] == ["verstappen"]
+        assert race["predictions"]["alice"] == ["verstappen"]
 
 
 class TestGameData:

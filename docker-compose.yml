@@ -11,9 +11,6 @@ services:
       # Required for write endpoints.  Set a strong random value in production:
       #   API_TOKEN=$(openssl rand -hex 32)
       API_TOKEN: "${API_TOKEN:-}"
-      # Override the data file path (already set in the Dockerfile, repeated
-      # here for clarity and to allow host-side override).
-      POINTS_DATA_FILE: /data/points_are_bad_data.json
       # Set to "false" to disable rate limiting during local development.
       RATELIMIT_ENABLED: "${RATELIMIT_ENABLED:-true}"
     restart: unless-stopped

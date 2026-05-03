@@ -47,18 +47,26 @@ uv pip install -e '.[dev,web]'   # CLI + Flask + Gunicorn + dev tools
 .venv/bin/points-are-bad
 ```
 
-Data is auto-created at `points_are_bad_data.json` in the working directory. Override with `POINTS_DATA_FILE=/path/to/file.json`.
+Data is auto-created at `points_are_bad_data.json` in the working directory. Override with `POINTS_DATA_FILE=/path/to/file.json`. Player names are stored lowercase.
 
 ## Web Dashboard
 
 ### Development (Flask dev server)
 
 ```bash
+# One-time install (if you haven't already)
+uv pip install -e '.[web]'
+
+# Then run
 uv run web/server.py            # → http://localhost:5001
 # or, after installing scripts:
 points-are-bad-web
 
 PORT=8080 points-are-bad-web   # custom port
+
+# Enable authentication (required for write endpoints)
+API_TOKEN=mysecret uv run web/server.py
+# Then enter the token in the dashboard header (stored in localStorage)
 ```
 
 ### Production (Gunicorn)
@@ -81,7 +89,9 @@ mkdir -p data
 API_TOKEN=$(openssl rand -hex 32) docker compose up
 ```
 
-`API_TOKEN` is a shared secret required by all write endpoints (`POST /predictions`, `POST /results`, `POST /players`). Without it, those endpoints are open — suitable only for local dev. Pass it as a `Bearer` token:
+The Docker image uses a single-stage build with `uv`, runs as a non-root `pab` user, and includes a `docker-entrypoint.sh` that fixes volume permissions on startup. A `.dockerignore` excludes caches, tests, and dev files from the build context.
+
+`API_TOKEN` is a shared secret required by all write endpoints (`POST /predictions`, `POST /results`, `POST/DELETE /players`, `POST/DELETE /races`, `/races/fetch-results`). Without it, those endpoints are open — suitable only for local dev. Pass it as a `Bearer` token:
 
 ```bash
 curl -X POST http://localhost:5001/players \
@@ -100,11 +110,12 @@ curl -X POST http://localhost:5001/players \
 | `RATELIMIT_ENABLED` | `true` | Set to `false` to disable rate limiting |
 
 The dashboard provides:
-- **Season standings** with score bars and delta from the leader
+- **Season standings** with score bars (lowest score = largest bar) and delta from the leader
 - **Race log** — click any completed race to see a full position-by-position breakdown
 - **Pending predictions** — clicking an upcoming race shows who has submitted picks and who hasn't
 - **Prediction entry** — `+ PREDICT` opens a 3-step modal: select pilot → select race → pick P1–P10 from the driver roster
-- **New pilot creation** — add a player inline from step 1 of the prediction modal
+- **New pilot creation / removal** — add or remove a player inline from step 1 of the prediction modal
+- **Auth token** — input in the header bar, persisted in localStorage; sent as `Bearer` with all write requests
 
 ### Web API
 
@@ -117,6 +128,10 @@ All write endpoints require `Authorization: Bearer <API_TOKEN>` when `API_TOKEN`
 | `POST` | `/predictions` | Bearer | 60/hr, 10/min | Submit or overwrite a prediction |
 | `POST` | `/results` | Bearer | 30/hr, 5/min | Enter actual race results |
 | `POST` | `/players` | Bearer | 20/hr, 5/min | Add a new player |
+| `DELETE` | `/players` | Bearer | 20/hr, 5/min | Remove a player and all their predictions |
+| `POST` | `/races` | Bearer | 20/hr, 5/min | Add a race to the schedule |
+| `DELETE` | `/races` | Bearer | 20/hr, 5/min | Remove a race (must not have results) |
+| `POST` | `/races/fetch-results` | Bearer | 10/hr, 2/min | Auto-fetch results from FastF1/OpenF1 for a past race |
 
 `POST /predictions` body:
 ```json
@@ -145,7 +160,13 @@ Returns `409` if results are already entered for that race.
 ```json
 { "name": "alice" }
 ```
-Returns `409` if the player already exists (not `400` — so clients can distinguish "name taken" from "name invalid").
+Returns `409` if the player already exists (not `400` — so clients can distinguish "name taken" from "name invalid"). Player names are stored lowercase.
+
+`DELETE /players` body:
+```json
+{ "name": "alice" }
+```
+Removes the player and all their predictions from every race. Returns `404` if unknown.
 
 ## Testing
 
@@ -201,10 +222,11 @@ Must call in sequence: `/meetings` → `/sessions` → `/session_result` → `/d
 
 ## Features
 
-- **Player management** — add/remove players via CLI or web dashboard.
-- **Race schedule** — auto-populate from FastF1; dates are kept in sync.
+- **Player management** — add/remove players via CLI or web dashboard (removal cleans up predictions).
+- **Race schedule** — add/remove/auto-populate from FastF1; dates kept in sync.
 - **Driver-select UI** — interactive picker grouped by team, available in both CLI and web.
 - **Automated result fetching** — FastF1 (official) → OpenF1 (community) → manual entry.
 - **Points breakdown** — per-position view for any race across all players.
-- **Season standings** — live table sorted by fewest points.
+- **Season standings** — live table sorted by fewest points; bars scale inversely (best = widest).
 - **Web dashboard** — aerospace-aesthetic dark-mode SPA; no build step required.
+- **Auth token UI** — enter `API_TOKEN` in the header; persisted in localStorage across sessions.

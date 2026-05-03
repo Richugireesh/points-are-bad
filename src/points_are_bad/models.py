@@ -55,11 +55,17 @@ class RaceData(TypedDict):
     predictions: dict[str, list[str]]
 
 
-class GameData(TypedDict):
-    """Top-level structure of ``points_are_bad_data.json``."""
+class GameData(TypedDict, total=False):
+    """Top-level structure of ``points_are_bad_data.json``.
+
+    ``version`` is written by the storage layer to track the schema version.
+    It is declared with ``total=False`` so callers and tests that construct
+    GameData dicts without a version key don't need to supply it.
+    """
 
     players: list[str]
     races: list[RaceData]
+    version: int
 
 
 class DriverInfo(TypedDict):

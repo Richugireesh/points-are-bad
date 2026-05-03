@@ -313,3 +313,64 @@ class TestGetScheduleUpdates:
 
         assert len(date_updates) == 1
         assert date_updates[0][1] == "2026-03-01"
+
+
+# ---------------------------------------------------------------------------
+# fetch_fastf1_results
+# ---------------------------------------------------------------------------
+
+
+import pandas as pd  # noqa: E402
+
+
+class TestFetchFastF1Results:
+    def test_returns_none_when_fastf1_not_installed(self, monkeypatch):
+        monkeypatch.setattr(api_mod, "HAS_FASTF1", False)
+        result = api_mod.fetch_fastf1_results(2026, "Australian Grand Prix")
+        assert result is None
+
+    def test_returns_drivers_on_success(self, monkeypatch):
+        monkeypatch.setattr(api_mod, "HAS_FASTF1", True)
+        mock_session = MagicMock()
+        mock_session.results = pd.DataFrame({
+            "Position": [1, 2],
+            "FirstName": ["Max", "Lando"],
+            "LastName": ["Verstappen", "Norris"],
+            "Abbreviation": ["VER", "NOR"],
+        })
+        mock_fastf1 = MagicMock()
+        mock_fastf1.get_session.return_value = mock_session
+        mock_fastf1.Cache.enable_cache = MagicMock()
+        monkeypatch.setattr(api_mod, "fastf1", mock_fastf1)
+
+        result = api_mod.fetch_fastf1_results(2026, "Australian Grand Prix")
+        assert result is not None
+        assert len(result) == 2
+        assert result[0]["abbr"] == "VER"
+        assert result[0]["name"] == "Max Verstappen"
+
+    def test_returns_none_when_position_column_missing(self, monkeypatch):
+        monkeypatch.setattr(api_mod, "HAS_FASTF1", True)
+        mock_session = MagicMock()
+        mock_session.results = pd.DataFrame({
+            "FirstName": ["Max"],
+            "LastName": ["Verstappen"],
+            "Abbreviation": ["VER"],
+        })
+        mock_fastf1 = MagicMock()
+        mock_fastf1.get_session.return_value = mock_session
+        mock_fastf1.Cache.enable_cache = MagicMock()
+        monkeypatch.setattr(api_mod, "fastf1", mock_fastf1)
+
+        result = api_mod.fetch_fastf1_results(2026, "Australian Grand Prix")
+        assert result is None
+
+    def test_returns_none_on_exception(self, monkeypatch):
+        monkeypatch.setattr(api_mod, "HAS_FASTF1", True)
+        mock_fastf1 = MagicMock()
+        mock_fastf1.get_session.side_effect = RuntimeError("boom")
+        mock_fastf1.Cache.enable_cache = MagicMock()
+        monkeypatch.setattr(api_mod, "fastf1", mock_fastf1)
+
+        result = api_mod.fetch_fastf1_results(2026, "Australian Grand Prix")
+        assert result is None

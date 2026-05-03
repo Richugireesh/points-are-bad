@@ -23,7 +23,7 @@ import logging
 import os
 import urllib.error
 import urllib.request
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 if TYPE_CHECKING:
     from .models import DriverResult, RaceData
@@ -52,7 +52,14 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 
-def _fetch_openf1_json(url: str) -> list[Any] | dict[str, Any] | None:
+def _setup_fastf1_cache() -> None:
+    """Ensure the FastF1 cache directory exists and is enabled."""
+    cache_dir = os.path.abspath("fastf1_cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    fastf1.Cache.enable_cache(cache_dir)
+
+
+def _fetch_openf1_json(url: str) -> Optional[Union[list[Any], dict[str, Any]]]:
     """Fetch *url* with ``urllib.request`` and return parsed JSON.
 
     Using urllib bypasses FastF1's global requests-cache monkey-patch.
@@ -80,7 +87,7 @@ def _fetch_openf1_json(url: str) -> list[Any] | dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 
 
-def fetch_fastf1_results(year: int, race_name: str) -> list[DriverResult] | None:
+def fetch_fastf1_results(year: int, race_name: str) -> Optional[list[DriverResult]]:
     """Return the top-10 results for *race_name* from the FastF1 API.
 
     Each entry is a :class:`~models.DriverResult` dict ``{"abbr": ..., "name": ...}``.
@@ -90,10 +97,8 @@ def fetch_fastf1_results(year: int, race_name: str) -> list[DriverResult] | None
         return None
 
     _log.info("Fetching official FastF1 data for %s (%s)...", race_name, year)
+    _setup_fastf1_cache()
     try:
-        cache_dir = os.path.abspath("fastf1_cache")
-        os.makedirs(cache_dir, exist_ok=True)
-        fastf1.Cache.enable_cache(cache_dir)
 
         session = fastf1.get_session(year, race_name, "R")
         session.load(telemetry=False, laps=False, weather=False)
@@ -124,7 +129,7 @@ def fetch_fastf1_results(year: int, race_name: str) -> list[DriverResult] | None
 # ---------------------------------------------------------------------------
 
 
-def fetch_openf1_results(year: int, race_name: str) -> list[DriverResult] | None:
+def fetch_openf1_results(year: int, race_name: str) -> Optional[list[DriverResult]]:
     """Return the top-10 results for *race_name* from the OpenF1 API.
 
     Follows the required endpoint sequence:
@@ -139,7 +144,7 @@ def fetch_openf1_results(year: int, race_name: str) -> list[DriverResult] | None
         if not meetings or not isinstance(meetings, list):
             return None
 
-        target_meeting: dict[str, Any] | None = None
+        target_meeting: Optional[dict[str, Any]] = None
         for m in meetings:
             m_name = m.get("meeting_name", "").lower()
             if m_name in race_name.lower() or race_name.lower() in m_name:
@@ -234,9 +239,9 @@ def fetch_openf1_results(year: int, race_name: str) -> list[DriverResult] | None
         return None
 
 
-def fetch_results(year: int, race_name: str) -> list[DriverResult] | None:
+def fetch_results(year: int, race_name: str) -> Optional[list[DriverResult]]:
     """Try FastF1 first, fall back to OpenF1.  Returns ``None`` if both fail."""
-    result = fetch_fastf1_results(year, race_name) if HAS_FASTF1 else None
+    result = fetch_fastf1_results(year, race_name)
     return result or fetch_openf1_results(year, race_name)
 
 
@@ -261,9 +266,7 @@ def get_schedule_updates(
         raise RuntimeError("FastF1 is not installed.")
 
     year = datetime.datetime.now().year
-    cache_dir = os.path.abspath("fastf1_cache")
-    os.makedirs(cache_dir, exist_ok=True)
-    fastf1.Cache.enable_cache(cache_dir)
+    _setup_fastf1_cache()
 
     schedule = fastf1.get_event_schedule(year)
     events = schedule[schedule["EventFormat"] != "testing"]

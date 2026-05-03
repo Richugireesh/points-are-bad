@@ -889,11 +889,13 @@ body::after {
 }
 
 .player-tile {
-  padding: 16px 12px;
+  padding: 12px;
   border: 1px solid var(--border);
   background: var(--bg-panel-alt);
-  cursor: pointer;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   font-size: 14px;
   letter-spacing: .08em;
   color: var(--text-bright);
@@ -1219,6 +1221,9 @@ body::after {
 
     <div class="header-right">
       <button id="btn-predict" onclick="openPredictModal()">+ PREDICT</button>
+      <input id="api-token-input" type="password" placeholder="token"
+             onchange="saveToken(this.value)" style="width:80px;font-family:var(--font-mono);font-size:9px;background:var(--bg);border:1px solid var(--border);color:var(--text-dim);padding:3px 5px;border-radius:2px;outline:none"
+             onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'" />
       <div class="status-dot" title="Live"></div>
       <div id="clock">00:00:00 UTC</div>
     </div>
@@ -1300,18 +1305,51 @@ body::after {
 
 <script>
 // ═══════════════════════════════════════════════════════════════
+// AUTH — token persisted in localStorage, sent with write requests
+// ═══════════════════════════════════════════════════════════════
+
+let _token = localStorage.getItem('pab_token') || '';
+if (_token) $('api-token-input').value = _token;
+
+function saveToken(v) {
+  _token = v.trim();
+  if (_token) localStorage.setItem('pab_token', _token);
+  else localStorage.removeItem('pab_token');
+}
+
+async function _authFetch(url, opts = {}) {
+  if (_token) {
+    opts.headers = opts.headers || {};
+    opts.headers['Authorization'] = 'Bearer ' + _token;
+  }
+  const res = await fetch(url, opts);
+  if (res.status === 401) {
+    showToast(
+      _token
+        ? 'Token rejected — check your API_TOKEN'
+        : 'Auth required — enter your API_TOKEN in the header',
+      true
+    );
+  }
+  return res;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // SCORING LOGIC  (mirrors scoring.py exactly)
 // ═══════════════════════════════════════════════════════════════
 
 const ALIASES = {
-  'kimi':'antonelli','lec':'leclerc','ver':'verstappen','max':'verstappen',
-  'ham':'hamilton','nor':'norris','pia':'piastri','rus':'russell',
-  'lind':'lindblad','linblad':'lindblad','bor':'bortoleto','gabby':'bortoleto',
-  'gab':'bortoleto','hadj':'hadjar','alo':'alonso','per':'perez','checo':'perez',
-  'gas':'gasly','oco':'ocon','tsu':'tsunoda','yuki':'tsunoda','hul':'hulkenberg',
-  'str':'stroll','mag':'magnussen','alb':'albon','col':'colapinto','bea':'bearman',
-  'ollie':'bearman','sai':'sainz','zho':'zhou','bot':'bottas','law':'lawson',
-  'doo':'doohan',
+  'nor':'norris','pia':'piastri',
+  'lec':'leclerc','ham':'hamilton',
+  'rus':'russell','kimi':'antonelli',
+  'ver':'verstappen','max':'verstappen','hadj':'hadjar','had':'hadjar',
+  'law':'lawson','lind':'lindblad','linblad':'lindblad','lin':'lindblad',
+  'alo':'alonso','str':'stroll',
+  'sai':'sainz','alb':'albon',
+  'gas':'gasly','col':'colapinto',
+  'oco':'ocon','bea':'bearman','ollie':'bearman',
+  'hul':'hulkenberg','bor':'bortoleto','gabby':'bortoleto','gab':'bortoleto',
+  'per':'perez','checo':'perez','bot':'bottas',
 };
 
 function _normalize(s) {
@@ -1489,7 +1527,7 @@ function renderStandings(data) {
   $('hdr-players').textContent = data.players.length;
   $('hdr-rounds').textContent  = `${counted} / ${data.races.length}`;
   if (sorted.length) {
-    $('hdr-leader').textContent = `${sorted[0][0].toLowerCase()}  (${sorted[0][1]}pts)`;
+    $('hdr-leader').textContent = `${sorted[0][0].toLowerCase()}  (${sorted[0][1]} pts)`;
   }
 
   const nextRace = data.races.find(r => !r.actual_results?.length && r.date >= today());
@@ -1526,8 +1564,8 @@ function renderStandings(data) {
     const delta  = i === 0 ? '—' : `+${pts - sorted[0][1]}`;
     const rankCls = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : '';
     const fillCls = rank === 1 ? 'fill-1' : rank === 2 ? 'fill-2' : rank === 3 ? 'fill-3' : 'fill-n';
-    // bar width: leader is 100%, others are proportional based on inverted scale
-    const barPct = maxPts > 0 ? Math.round((pts / maxPts) * 100) : 0;
+    // Inverted bar: how good you are vs the worst.  Leader = 100%, worst = 0%.
+    const barPct = spread > 0 ? Math.round(((maxPts - pts) / spread) * 100) : 100;
 
     html += `<tr class="standings-row">
       <td class="standings-rank ${rankCls}">${rank}</td>
@@ -1722,10 +1760,10 @@ function renderUpcomingRaceDetail(race, players, raceIdx) {
       <span class="pc-status">${sub ? '✓ READY' : '○ OPEN'}</span>
     </div>`;
   }
+  const isPast = race.date && race.date < today();
   headerHtml += `<button class="pending-cta" onclick="openPredictForRace(${raceIdx})">→ ENTER PREDICTION</button>`;
-  headerHtml += `<button class="pending-cta pending-cta-results" onclick="openResultsModal(${raceIdx})">⊕ ENTER RESULTS</button>`;
-  // Auto-fetch button — only for past races (date has already passed)
-  if (race.date && race.date < today()) {
+  if (isPast) {
+    headerHtml += `<button class="pending-cta pending-cta-results" onclick="openResultsModal(${raceIdx})">⊕ ENTER RESULTS</button>`;
     headerHtml += `<button class="pending-cta" id="btn-auto-fetch" onclick="autoFetchResults(${raceIdx})">⟳ AUTO-FETCH</button>`;
   }
   $('detail-scores').innerHTML = headerHtml;
@@ -1841,7 +1879,7 @@ async function addRaceFromForm() {
   if (!name) { showToast('Race name is required.', true); return; }
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) { showToast('Date must be YYYY-MM-DD.', true); return; }
   try {
-    const res = await fetch('/races', {
+    const res = await _authFetch('/races', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, date }),
@@ -1860,7 +1898,7 @@ async function autoFetchResults(raceIdx) {
   const btn = $('btn-auto-fetch');
   if (btn) { btn.disabled = true; btn.textContent = '⟳ FETCHING…'; }
   try {
-    const res = await fetch('/races/fetch-results', {
+    const res = await _authFetch('/races/fetch-results', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ race_name: race.name }),
@@ -1879,7 +1917,7 @@ async function deleteRace(idx) {
   const race = _gameData.races[idx];
   if (!confirm(`Remove "${race.name}" from the schedule?\n\nThis cannot be undone.`)) return;
   try {
-    const res = await fetch('/races', {
+    const res = await _authFetch('/races', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ race_name: race.name }),
@@ -1976,7 +2014,10 @@ function renderStepPlayer() {
   let html = '<div class="player-grid">';
   for (const p of _gameData.players) {
     const sel = _modal.player === p ? ' selected' : '';
-    html += `<div class="player-tile${sel}" onclick="selectModalPlayer('${escHtml(p)}')">${escHtml(p)}</div>`;
+    html += `<div class="player-tile${sel}">
+      <span onclick="selectModalPlayer('${escHtml(p)}')" style="cursor:pointer;flex:1">${escHtml(p)}</span>
+      <button class="race-delete-btn" title="Remove pilot" onclick="event.stopPropagation();removePlayer('${escHtml(p)}')" style="font-size:9px;padding:1px 4px">✕</button>
+    </div>`;
   }
   // "+ NEW PILOT" tile
   const newSel = _modal.addingPlayer ? ' selected' : '';
@@ -1993,6 +2034,24 @@ function renderStepPlayer() {
     </div>`;
   }
   return html;
+}
+
+async function removePlayer(name) {
+  if (!confirm(`Remove pilot "${name}" and all their predictions?\n\nThis cannot be undone.`)) return;
+  try {
+    const res = await _authFetch('/players', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const body = await res.json();
+    if (!res.ok || body.error) throw new Error(body.error || `HTTP ${res.status}`);
+    showToast(`Pilot '${name}' removed.`);
+    await _refreshDashboard();
+    closePredictModal();
+  } catch (err) {
+    showToast(String(err.message || err), true);
+  }
 }
 
 function selectModalPlayer(name) {
@@ -2014,7 +2073,7 @@ async function confirmNewPlayer() {
   const next = $('modal-next');
   next.disabled = true;
   try {
-    const res  = await fetch('/players', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
+    const res  = await _authFetch('/players', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
     const body = await res.json();
     if (!res.ok || body.error) throw new Error(body.error || `HTTP ${res.status}`);
 
@@ -2042,8 +2101,16 @@ function renderStepRace() {
   const upcoming = _gameData.races.filter(r => !r.actual_results?.length);
   if (!upcoming.length) return '<div class="no-data">no upcoming races</div>';
 
+  // Sort: open (unpredicted) races first, then already-predicted races
+  const sorted = [...upcoming].sort((a, b) => {
+    const aPred = !!(a.predictions?.[_modal.player]);
+    const bPred = !!(b.predictions?.[_modal.player]);
+    if (aPred !== bPred) return aPred ? 1 : -1;
+    return (a.date || '9999') < (b.date || '9999') ? -1 : 1;
+  });
+
   let html = '<ul class="race-select-list">';
-  for (const race of upcoming) {
+  for (const race of sorted) {
     const idx     = _gameData.races.indexOf(race);
     const hasPred = !!(race.predictions?.[_modal.player]);
     const isSel   = _modal.race === race;
@@ -2202,7 +2269,7 @@ async function submitPrediction() {
   _startSubmit(next);
 
   try {
-    const res = await fetch('/predictions', {
+    const res = await _authFetch('/predictions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2237,7 +2304,7 @@ async function submitResults() {
       return { name: d ? d.name : key, abbr: d ? d.abbr : key.toUpperCase() };
     });
 
-    const res = await fetch('/results', {
+    const res = await _authFetch('/results', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ race_name: _modal.race.name, results }),

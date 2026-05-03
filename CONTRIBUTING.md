@@ -18,6 +18,9 @@ Optionally install pre-commit hooks (runs ruff and mypy on staged files):
 ## Running the app
 
 ```bash
+# One-time install
+uv pip install -e '.[web]'
+
 # CLI
 .venv/bin/points-are-bad
 
@@ -35,10 +38,9 @@ Override the data file path or set auth for local testing:
 POINTS_DATA_FILE=/tmp/test_data.json .venv/bin/points-are-bad
 POINTS_DATA_FILE=/tmp/test_data.json uv run web/server.py
 
-# Enable token auth locally
+# Enable token auth — enter the same token in the dashboard header
 API_TOKEN=mysecret uv run web/server.py
-# Then pass the token in requests:
-#   -H "Authorization: Bearer mysecret"
+# The dashboard stores the token in localStorage so you only enter it once.
 
 # Disable rate limiting during manual testing
 RATELIMIT_ENABLED=false uv run web/server.py
@@ -71,7 +73,8 @@ Coverage must stay at or above 80%. The threshold is enforced by `pytest-cov` vi
 ### Type annotations
 - All public function signatures must be fully annotated.
 - Use `from __future__ import annotations` at the top of every module.
-- Use `Optional` / `Union` (not `X | Y`) in module-level type alias assignments for Python 3.9 compatibility.
+- Use `Optional` / `Union` (not `X | Y`) — Python 3.9 compatibility. Ruff rules `UP007` and `UP045` are suppressed in `pyproject.toml` because they push toward `X | Y` syntax.
+- `GameData` uses `total=False` so the `version` field is optional for test fixtures and callers.
 - Run `mypy src/` and fix all errors before opening a PR.
 
 ### Modules and responsibilities
@@ -84,7 +87,7 @@ Keep the module boundaries strict:
 | `storage.py` | stdlib, `exceptions`, `models` | `api`, `cli`, `scoring` |
 | `api.py` | stdlib, `fastf1`, `models`, `exceptions` | `cli`, `storage`, `scoring` |
 | `cli.py` | any internal module | — |
-| `web/server.py` | stdlib, `flask`, `flask_limiter`, `points_are_bad.*` | `cli`, `api` |
+| `web/server.py` | stdlib, `hmac`, `flask`, `flask_limiter`, `points_are_bad.*` | `cli`, `api` |
 
 `web/server.py` is intentionally kept thin — it reads/writes the JSON file directly and delegates alias logic to `scoring.ALIASES`. It must not grow into a second CLI.
 
@@ -93,10 +96,13 @@ Keep the module boundaries strict:
 - All file mutations hold `_data_lock` (a `threading.Lock`) for the full read-modify-write cycle.
 - Error responses use `_err(msg, code)` — never return raw `jsonify({"error": ...})` inline.
 - The `/aliases` endpoint must stay in sync with `scoring.ALIASES`; it imports and re-exports the same dict.
-- **409 for duplicates, not 400** — `POST /predictions`, `POST /results`, and `POST /players` all return `409` when the resource already exists. `400` means the input itself is invalid (wrong type, missing field, unknown player/race). Clients rely on this distinction.
+- **409 for duplicates, not 400** — `POST /predictions`, `POST /results`, `POST /players`, `POST /races` all return `409` when the resource already exists. `400` means the input itself is invalid. `DELETE /players` and `DELETE /races` return `404` for unknown resources. Clients rely on this distinction.
+- **Race lookups** use the `_find_race(game, race_name)` helper to avoid repeated O(n) scans.
+- **Token auth** uses `hmac.compare_digest` for timing-safe comparison.
 - **Rate limiting** is applied per-endpoint via `@limiter.limit(...)` (flask-limiter). The `Limiter` instance is module-level so all routes share the same in-memory counter. Do not bypass or remove these decorators. In tests, the `client` fixture monkeypatches `limiter.enabled = False` so tests making multiple requests to the same endpoint don't trip limits.
 - **Request size** is capped at 16 KB via `MAX_CONTENT_LENGTH`. The `413` error handler returns JSON (not Flask's default HTML). Keep all write payloads well under this limit.
 - **Workers must stay at 1** in Gunicorn (`gunicorn.conf.py`). The threading.Lock is in-process. Multiple workers each get their own lock copy, making it useless. If you ever need to scale beyond 1 worker, migrate storage to SQLite (or any external store) first.
+- **Player names are lowercase** — both `POST /players` and the CLI `manage_players` enforce this. The prediction endpoint (`POST /predictions`) lowercases the player field before checking. All internal lookups are case-sensitive against the lowercase list.
 
 ### JavaScript scoring
 
@@ -104,7 +110,7 @@ Keep the module boundaries strict:
 
 ### API quirk — do not use `requests` in `api.py`
 
-FastF1 monkey-patches `requests` globally with aggressive caching. All secondary HTTP calls (OpenF1, custom endpoints) must use `urllib.request` to bypass the cache.
+FastF1 monkey-patches `requests` globally with aggressive caching. All secondary HTTP calls (OpenF1, custom endpoints) must use `urllib.request` to bypass the cache. FastF1 cache-dir setup is centralized in `_setup_fastf1_cache()` — use this helper in any new FastF1 call sites.
 
 ### Adding a driver to the roster
 

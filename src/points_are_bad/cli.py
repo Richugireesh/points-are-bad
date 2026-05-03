@@ -13,7 +13,7 @@ import datetime
 import os
 import re
 import sys
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Optional, TypeVar, Union
 
 from .api import HAS_FASTF1, fetch_results, get_schedule_updates
 from .drivers import ROSTER, by_key
@@ -143,7 +143,7 @@ def select_item(
     items: list[_T],
     item_name: str,
     display_func: Callable[[_T], str] = str,
-) -> _T | None:
+) -> Optional[_T]:
     """Print a numbered list and return the chosen item, or None on bad input."""
     if not items:
         input(f"\n  No {item_name}s exist. Add one first. Press Enter...")
@@ -274,7 +274,7 @@ def manage_players(data: GameData) -> None:
         choice = input("  Select [1-3]: ").strip()
 
         if choice == "1":
-            name = input("\n  Player name: ").strip()
+            name = input("\n  Player name: ").strip().lower()
             if name and name not in data["players"]:
                 data["players"].append(name)
                 save_data(data)
@@ -430,8 +430,8 @@ def _render_driver_list(roster: list[DriverInfo], picked: list[DriverInfo]) -> N
 def _build_prediction(
     race_name: str,
     player: str,
-    prefill: list[str] | None = None,
-) -> list[str] | None:
+    prefill: Optional[list[str]] = None,
+) -> Optional[list[str]]:
     """Interactive driver-select loop.  Returns the prediction as a list of
     canonical driver keys, or None if the user cancels.
 
@@ -577,7 +577,7 @@ def enter_predictions(data: GameData) -> None:
         answer = input("  [e] Edit  [c] Cancel: ").strip().lower()
         if answer != "e":
             return
-        prefill: list[str] | None = existing
+        prefill: Optional[list[str]] = existing
     else:
         prefill = None
 
@@ -658,7 +658,7 @@ def enter_results(data: GameData) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _act_display(actual_entry: DriverResult | str | None) -> str:
+def _act_display(actual_entry: Union[DriverResult, str, None]) -> str:
     """Return a display string for one actual-result entry."""
     if actual_entry is None:
         return "(none)"

@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import json
-import pathlib
-from typing import Generator
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    import pathlib
+    from collections.abc import Generator
 
 import points_are_bad.storage as storage_module
 import web.server as web_server
@@ -38,7 +41,7 @@ _MINIMAL_DATA: dict = {
         },
         {
             "name": "Bahrain Grand Prix",
-            "date": "2026-04-12",
+            "date": "2099-12-31",
             "actual_results": [],
             "predictions": {},
         },
@@ -251,6 +254,37 @@ def test_add_player_name_too_long(client) -> None:
 
 def test_add_player_whitespace_only(client) -> None:
     res = client.post("/players", json={"name": "   "})
+    assert res.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# DELETE /players
+# ---------------------------------------------------------------------------
+
+def test_delete_player_removes_from_file(client, tmp_data: pathlib.Path) -> None:
+    res = client.delete("/players", json={"name": "alice"})
+    assert res.status_code == 200
+    assert res.get_json()["ok"] is True
+    saved = json.loads(tmp_data.read_text())
+    assert "alice" not in saved["players"]
+
+
+def test_delete_player_cleans_predictions(client, tmp_data: pathlib.Path) -> None:
+    # alice has a prediction in _MINIMAL_DATA — verify it's removed
+    client.delete("/players", json={"name": "alice"})
+    saved = json.loads(tmp_data.read_text())
+    for race in saved["races"]:
+        assert "alice" not in race.get("predictions", {})
+
+
+def test_delete_player_unknown_returns_404(client) -> None:
+    res = client.delete("/players", json={"name": "nobody"})
+    assert res.status_code == 404
+    assert "Unknown player" in res.get_json()["error"]
+
+
+def test_delete_player_missing_name_returns_400(client) -> None:
+    res = client.delete("/players", json={})
     assert res.status_code == 400
 
 

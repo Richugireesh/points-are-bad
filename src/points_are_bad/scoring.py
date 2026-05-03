@@ -10,9 +10,11 @@ This module has no I/O or external-API dependencies and is fully unit-testable.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from .models import DriverResult, GameData
 
     _ActualEntry = Union[DriverResult, str]  # str kept for legacy callers only
@@ -115,8 +117,8 @@ def calculate_str_equality(prediction: str, actual: _ActualEntry) -> bool:
 
 
 def score_position(
-    pred: str | None,
-    actual_entry: _ActualEntry | None,
+    pred: Optional[str],
+    actual_entry: Optional[_ActualEntry],
 ) -> int:
     """Return 0 (match) or 1 (mismatch) for one finishing position.
 
@@ -133,8 +135,8 @@ def score_position(
 
 
 def calculate_player_points_for_race(
-    prediction: list[str],
-    actual: list[_ActualEntry],
+    prediction: Sequence[str],
+    actual: Sequence[_ActualEntry],
 ) -> int:
     """Total points for one player in one race.
 

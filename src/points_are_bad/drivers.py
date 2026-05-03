@@ -8,7 +8,7 @@ that predictions made via driver-select score correctly.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from .models import DriverInfo
@@ -60,11 +60,11 @@ _BY_KEY: dict[str, DriverInfo] = {d["key"]: d for d in ROSTER}
 _BY_ABBR: dict[str, DriverInfo] = {d["abbr"]: d for d in ROSTER}
 
 
-def by_key(key: str) -> DriverInfo | None:
+def by_key(key: str) -> Optional[DriverInfo]:
     """Return the driver dict for a canonical key, or ``None``."""
     return _BY_KEY.get(key.lower())
 
 
-def by_abbr(abbr: str) -> DriverInfo | None:
+def by_abbr(abbr: str) -> Optional[DriverInfo]:
     """Return the driver dict for a 3-letter abbreviation, or ``None``."""
     return _BY_ABBR.get(abbr.upper())
