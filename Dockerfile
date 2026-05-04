@@ -1,18 +1,18 @@
 # ── Stage 1: build dependencies ─────────────────────────────────────────────
 FROM python:3.12-slim AS builder
 
-WORKDIR /build
+WORKDIR /app
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Copy only the files needed to resolve the dependency graph first, so Docker
 # caches this layer and skips re-downloading packages when only source changes.
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
 
-# Install the package and its web dependencies into a venv under /build/.venv
-RUN uv venv .venv && \
+# Install the package and its web dependencies into a venv under /app/.venv
+RUN uv venv /app/.venv && \
     uv pip install --no-cache -e ".[web]"
 
 # ── Stage 2: runtime image ───────────────────────────────────────────────────
@@ -24,8 +24,8 @@ RUN groupadd -r pab && useradd -r -g pab -d /app -s /sbin/nologin pab
 WORKDIR /app
 
 # Copy the pre-built venv and source from the builder stage
-COPY --from=builder /build/.venv /app/.venv
-COPY --from=builder /build/src /app/src
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/src /app/src
 COPY web/ ./web/
 COPY gunicorn.conf.py ./
 COPY docker-entrypoint.sh /usr/local/bin/

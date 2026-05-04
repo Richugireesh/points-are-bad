@@ -11,8 +11,8 @@ services:
       # Required for write endpoints.  Set a strong random value in production:
       #   API_TOKEN=$(openssl rand -hex 32)
       API_TOKEN: "${API_TOKEN:-}"
-      # Override the data file path (already set in the Dockerfile, repeated
-      # here for clarity and to allow host-side override).
+      # Override the data file path (extension is swapped from .json to .db by
+      # storage.py, this value is the canonical POINTS_DATA_FILE env var).
       POINTS_DATA_FILE: /data/points_are_bad_data.json
       # Set to "false" to disable rate limiting during local development.
       RATELIMIT_ENABLED: "${RATELIMIT_ENABLED:-true}"
@@ -40,19 +40,18 @@ services:
   tailscale:
     image: tailscale/tailscale:latest
     container_name: points-are-bad-ts
-    hostname: ${TS_HOSTNAME:-points-are-bad}
+    depends_on:
+      web:
+        condition: service_healthy
     environment:
       - TS_AUTHKEY=${TS_AUTHKEY:?err}
       - TS_HOSTNAME=${TS_HOSTNAME:-points-are-bad}
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_SERVE_PORT=5001
-      - TS_USERSPACE=false
+      - TS_USERSPACE=true
     volumes:
       - ./tailscale/state:/var/lib/tailscale
     network_mode: "service:web"
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "tailscale", "status"]

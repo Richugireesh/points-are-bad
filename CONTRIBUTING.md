@@ -18,9 +18,6 @@ Optionally install pre-commit hooks (runs ruff and mypy on staged files):
 ## Running the app
 
 ```bash
-# CLI
-.venv/bin/points-are-bad
-
 # Web dashboard — development (Flask dev server)
 uv run web/server.py            # → http://localhost:5001
 PORT=8080 uv run web/server.py  # custom port
@@ -32,7 +29,6 @@ gunicorn -c gunicorn.conf.py web.server:app
 Override the data file path or set auth for local testing:
 
 ```bash
-POINTS_DATA_FILE=/tmp/test_data.json .venv/bin/points-are-bad
 POINTS_DATA_FILE=/tmp/test_data.json uv run web/server.py
 
 # Enable token auth locally
@@ -80,23 +76,22 @@ Keep the module boundaries strict:
 
 | Module | Allowed imports | Not allowed |
 |---|---|---|
-| `scoring.py` | stdlib only | `api`, `storage`, `cli` |
-| `storage.py` | stdlib, `exceptions`, `models` | `api`, `cli`, `scoring` |
-| `api.py` | stdlib, `fastf1`, `models`, `exceptions` | `cli`, `storage`, `scoring` |
-| `cli.py` | any internal module | — |
-| `web/server.py` | stdlib, `flask`, `flask_limiter`, `points_are_bad.*` | `cli`, `api` |
+| `scoring.py` | stdlib only | `api`, `storage` |
+| `storage.py` | stdlib, `exceptions`, `models` | `api`, `scoring` |
+| `api.py` | stdlib, `fastf1`, `models`, `exceptions` | `storage`, `scoring` |
+| `web/server.py` | stdlib, `flask`, `flask_limiter`, `points_are_bad.*` | — |
 
-`web/server.py` is intentionally kept thin — it reads/writes the JSON file directly and delegates alias logic to `scoring.ALIASES`. It must not grow into a second CLI.
+`web/server.py` is intentionally kept thin — it handles HTTP concerns and delegates to the storage/scoring/api modules.
 
 ### Web server conventions
 
-- All file mutations hold `_data_lock` (a `threading.Lock`) for the full read-modify-write cycle.
+- All file mutations use `BEGIN IMMEDIATE` transactions for safe concurrent writes via SQLite WAL.
 - Error responses use `_err(msg, code)` — never return raw `jsonify({"error": ...})` inline.
 - The `/aliases` endpoint must stay in sync with `scoring.ALIASES`; it imports and re-exports the same dict.
 - **409 for duplicates, not 400** — `POST /predictions`, `POST /results`, and `POST /players` all return `409` when the resource already exists. `400` means the input itself is invalid (wrong type, missing field, unknown player/race). Clients rely on this distinction.
 - **Rate limiting** is applied per-endpoint via `@limiter.limit(...)` (flask-limiter). The `Limiter` instance is module-level so all routes share the same in-memory counter. Do not bypass or remove these decorators. In tests, the `client` fixture monkeypatches `limiter.enabled = False` so tests making multiple requests to the same endpoint don't trip limits.
 - **Request size** is capped at 16 KB via `MAX_CONTENT_LENGTH`. The `413` error handler returns JSON (not Flask's default HTML). Keep all write payloads well under this limit.
-- **Workers must stay at 1** in Gunicorn (`gunicorn.conf.py`). The threading.Lock is in-process. Multiple workers each get their own lock copy, making it useless. If you ever need to scale beyond 1 worker, migrate storage to SQLite (or any external store) first.
+- **Workers** — Gunicorn workers default to 2 (see `gunicorn.conf.py`). SQLite WAL mode handles concurrent access safely across workers.
 
 ### JavaScript scoring
 

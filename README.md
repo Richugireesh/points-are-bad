@@ -1,6 +1,6 @@
 # Points Are Bad — F1 Prediction Game
 
-A Python CLI and web dashboard for playing "Points are Bad" — a Formula 1 prediction game among friends where players predict the Top 10 finishers of every Grand Prix. The objective is to accumulate the *fewest* points across the season.
+A web dashboard for playing "Points are Bad" — a Formula 1 prediction game among friends where players predict the Top 10 finishers of every Grand Prix. The objective is to accumulate the *fewest* points across the season.
 
 ## Rules
 
@@ -36,7 +36,7 @@ A Python CLI and web dashboard for playing "Points are Bad" — a Formula 1 pred
 git clone <repo>
 cd points-are-bad
 uv venv
-uv pip install -e '.[dev,web]'   # CLI + Flask + Gunicorn + dev tools
+uv pip install -e '.[dev,web]'   # Flask + Gunicorn + dev tools
 ```
 
 `[web]` pulls in Flask, flask-limiter, and Gunicorn. `[dev]` adds pytest, ruff, mypy, and pre-commit.
@@ -56,14 +56,6 @@ You can also trigger migration manually via Python:
 ```
 
 The database uses WAL journal mode for concurrent read/write safety across threads and Gunicorn workers.
-
-## CLI
-
-```bash
-.venv/bin/points-are-bad
-```
-
-Data is auto-created at `points_are_bad_data.db` in the working directory. Override with `POINTS_DATA_FILE` (the extension is swapped from `.json` to `.db` for the database; a `.json` file with the same name is used for legacy migration on first run).
 
 ## Web Dashboard
 
@@ -92,9 +84,9 @@ The `gunicorn.conf.py` defaults to `workers=2` with 4 threads each — SQLite WA
 docker build -t points-are-bad .
 docker run -p 5001:5001 -v $(pwd)/data:/data -e API_TOKEN=<secret> points-are-bad
 
-# Or with docker-compose (recommended — handles the data volume automatically)
+# Or with docker compose
 mkdir -p data
-API_TOKEN=$(openssl rand -hex 32) docker compose up
+API_TOKEN=$(openssl rand -hex 32) docker compose up -d
 ```
 
 `API_TOKEN` is a shared secret required by all write endpoints (`POST /predictions`, `POST /results`, `POST /players`). Without it, those endpoints are open — suitable only for local dev. Pass it as a `Bearer` token:
@@ -177,7 +169,6 @@ Coverage threshold is 80%, enforced by `pytest-cov`.
 
 ```
 src/points_are_bad/
-  cli.py        Interactive menus, input/output, orchestration
   scoring.py    Pure scoring logic; no I/O (fully unit-testable)
   api.py        FastF1 → OpenF1 → manual fallback chain for results
   storage.py    SQLite persistence (points_are_bad_data.db) with WAL mode
@@ -190,22 +181,20 @@ web/
   index.html    Single-page dashboard (pure HTML/CSS/JS, no build step)
 
 tests/
-  conftest.py           Shared fixtures (sample_data, no_clear_screen)
+  conftest.py           Shared fixtures (sample_data, isolated_test_db)
   test_scoring.py       100% coverage of scoring.py
   test_storage.py       Round-trip + error-path tests — 100% storage.py
   test_drivers.py       Roster integrity, lookup helpers
-  test_cli_utils.py     Pure CLI helpers, mocked select_item
-  test_cli_menus.py     Interactive menus with mocked input()
   test_api.py           urllib + fastf1 mocked, all fallback paths
   test_web_server.py    Flask test client — all endpoints + validation paths
 ```
 
 ### Key data flow
 
-1. `cli.py:main_menu()` loads `GameData` from SQLite via `storage.load_data()`.
-2. On startup it calls `auto_update_past_races()` which fetches missing results via `api.fetch_results()`.
+1. The Flask server loads `GameData` from SQLite via `storage.load_data()` on every `GET /data` request.
+2. Auto-fetch (`POST /races/fetch-results`) fetches missing results via `api.fetch_results()`.
 3. Scoring is always delegated to `scoring.calculate_player_points_for_race()` — the single source of truth for per-race points. The web dashboard replicates this logic in JavaScript (`calcPlayerPoints` in `index.html`) and verifies it by fetching `ALIASES` from `/aliases` on load.
-4. All writes go through `storage.save_data()` (CLI) or targeted SQL operations via the web server. SQLite WAL mode ensures concurrent read/write safety without application-level locking.
+4. All writes go through targeted SQL operations via the web server. SQLite WAL mode ensures concurrent read/write safety without application-level locking.
 
 ### API quirk — FastF1 monkey-patches `requests`
 
@@ -217,9 +206,9 @@ Must call in sequence: `/meetings` → `/sessions` → `/session_result` → `/d
 
 ## Features
 
-- **Player management** — add/remove players via CLI or web dashboard.
+- **Player management** — add/remove players via web dashboard.
 - **Race schedule** — auto-populate from FastF1; dates are kept in sync.
-- **Driver-select UI** — interactive picker grouped by team, available in both CLI and web.
+- **Driver-select UI** — interactive picker grouped by team.
 - **Automated result fetching** — FastF1 (official) → OpenF1 (community) → manual entry.
 - **Points breakdown** — per-position view for any race across all players.
 - **Season standings** — live table sorted by fewest points.

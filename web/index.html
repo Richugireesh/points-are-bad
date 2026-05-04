@@ -1442,6 +1442,16 @@ const el = (tag, cls, html) => {
 };
 
 // ═══════════════════════════════════════════════════════════════
+// API AUTH HELPER
+// ═══════════════════════════════════════════════════════════════
+
+function _writeHeaders() {
+  const h = { 'Content-Type': 'application/json' };
+  if (_API_TOKEN) h['Authorization'] = `Bearer ${_API_TOKEN}`;
+  return h;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // CLOCK
 // ═══════════════════════════════════════════════════════════════
 
@@ -1843,7 +1853,7 @@ async function addRaceFromForm() {
   try {
     const res = await fetch('/races', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: _writeHeaders(),
       body: JSON.stringify({ name, date }),
     });
     const body = await res.json();
@@ -1862,7 +1872,7 @@ async function autoFetchResults(raceIdx) {
   try {
     const res = await fetch('/races/fetch-results', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: _writeHeaders(),
       body: JSON.stringify({ race_name: race.name }),
     });
     const body = await res.json();
@@ -1881,7 +1891,7 @@ async function deleteRace(idx) {
   try {
     const res = await fetch('/races', {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
+      headers: _writeHeaders(),
       body: JSON.stringify({ race_name: race.name }),
     });
     const body = await res.json();
@@ -2014,7 +2024,7 @@ async function confirmNewPlayer() {
   const next = $('modal-next');
   next.disabled = true;
   try {
-    const res  = await fetch('/players', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
+    const res  = await fetch('/players', { method: 'POST', headers: _writeHeaders(), body: JSON.stringify({ name }) });
     const body = await res.json();
     if (!res.ok || body.error) throw new Error(body.error || `HTTP ${res.status}`);
 
@@ -2204,7 +2214,7 @@ async function submitPrediction() {
   try {
     const res = await fetch('/predictions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: _writeHeaders(),
       body: JSON.stringify({
         player: _modal.player,
         race_name: _modal.race.name,
@@ -2239,7 +2249,7 @@ async function submitResults() {
 
     const res = await fetch('/results', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: _writeHeaders(),
       body: JSON.stringify({ race_name: _modal.race.name, results }),
     });
     let body;

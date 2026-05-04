@@ -18,6 +18,7 @@ from __future__ import annotations
 import datetime
 import functools
 import hmac
+import json
 import logging
 import os
 import pathlib
@@ -182,7 +183,10 @@ def _security_headers(response: Response) -> Response:
 
 @app.route("/")
 def index() -> Response:
-    return send_from_directory(str(WEB_DIR), "index.html")
+    html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+    token_line = f"<script>const _API_TOKEN = {json.dumps(_API_TOKEN)};</script>"
+    html = html.replace("</head>", f"  {token_line}\n</head>", 1)
+    return Response(html, mimetype="text/html")
 
 
 @app.route("/data")
