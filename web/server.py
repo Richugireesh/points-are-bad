@@ -25,7 +25,7 @@ import pathlib
 import sys
 from typing import Callable, TypeVar, Union
 
-from flask import Flask, Response, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
@@ -54,7 +54,6 @@ from points_are_bad.storage import (
 
 _VALID_DRIVER_KEYS: frozenset[str] = frozenset(d["key"] for d in _ROSTER)
 
-ROOT = pathlib.Path(__file__).parent.parent
 WEB_DIR = pathlib.Path(__file__).parent
 
 # ---------------------------------------------------------------------------
@@ -181,12 +180,17 @@ def _security_headers(response: Response) -> Response:
 # ── Routes ──────────────────────────────────────────────────────────────────
 
 
+_CACHED_INDEX: str | None = None
+
+
 @app.route("/")
 def index() -> Response:
-    html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
-    token_line = f"<script>const _API_TOKEN = {json.dumps(_API_TOKEN)};</script>"
-    html = html.replace("</head>", f"  {token_line}\n</head>", 1)
-    return Response(html, mimetype="text/html")
+    global _CACHED_INDEX
+    if _CACHED_INDEX is None:
+        html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+        token_line = f"<script>const _API_TOKEN = {json.dumps(_API_TOKEN)};</script>"
+        _CACHED_INDEX = html.replace("</head>", f"  {token_line}\n</head>", 1)
+    return Response(_CACHED_INDEX, mimetype="text/html")
 
 
 @app.route("/data")

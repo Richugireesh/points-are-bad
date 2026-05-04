@@ -67,16 +67,6 @@ _MINIMAL_DATA: dict = {
 
 
 @pytest.fixture()
-def tmp_data(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> pathlib.Path:
-    """Create a temp SQLite database pre-populated with _MINIMAL_DATA."""
-    db_file = tmp_path / "data.db"
-    monkeypatch.setattr(storage_module, "DATA_DB_FILE", str(db_file))
-    storage_module.init_db()
-    storage_module.save_data(_MINIMAL_DATA)
-    return db_file
-
-
-@pytest.fixture()
 def client(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> Generator:
     # Point both DATA_FILE and DATA_DB_FILE at the temp db
     db_file = str(tmp_path / "data.db")
@@ -256,7 +246,7 @@ def test_post_prediction_duplicate_rejected_with_409(client) -> None:
     assert "already submitted" in res.get_json()["error"]
 
 
-def test_post_prediction_overwrite_accepted(client, tmp_data: pathlib.Path) -> None:
+def test_post_prediction_overwrite_accepted(client) -> None:
     new_pred = list(reversed(_OPEN_PRED))
     client.post(
         "/predictions",
