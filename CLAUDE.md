@@ -8,9 +8,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install (uses uv)
 uv venv && uv pip install -e '.[dev,web]'
 
-# Run CLI
-.venv/bin/points-are-bad
-
 # Run web dashboard — development (Flask dev server, → http://localhost:5001)
 uv run web/server.py
 # or after installing scripts:
@@ -38,11 +35,10 @@ pytest tests/ --cov=points_are_bad
 
 ## Architecture
 
-The app is a CLI/TUI game where players predict F1 Top-10 finishers and compete for the **lowest** score (wrong prediction = +1pt, missing = +10pt, perfect = 0pt).
+The app is a web dashboard where players predict F1 Top-10 finishers and compete for the **lowest** score (wrong prediction = +1pt, missing = +10pt, perfect = 0pt).
 
 Source lives under `src/points_are_bad/`. **Module responsibilities:**
 
-- `cli.py` — Primary entry point. Full terminal UI: menus, input loops, box-drawing display, and orchestration. No scoring math or HTTP requests live here.
 - `scoring.py` — Pure game logic with no external imports. `calculate_str_equality()` does flexible driver name matching (case-insensitive, alias-aware substrings). `calculate_season_standings()` aggregates scores. `ALIASES` dict is the single source of truth for driver shorthands — the web API exposes it via `GET /aliases`.
 - `api.py` — FastF1 (primary) → OpenF1 (fallback) → manual entry. **Critical quirk:** FastF1 monkey-patches `requests` with aggressive caching, so all OpenF1 calls must use `urllib.request`, never `requests`.
 - `storage.py` — SQLite persistence with WAL journal mode for concurrent read/write safety across threads and Gunicorn workers. Falls back to auto-migration from legacy JSON files on first run. Override path with `POINTS_DATA_FILE` env var.

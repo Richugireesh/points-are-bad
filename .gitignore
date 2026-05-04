@@ -18,10 +18,11 @@ fastf1_cache/
 .uv/
 
 # Data files — these are generated at runtime
-points_are_bad_data.db
+points_are_bad_data.db*
 points_are_bad_data.json
 points_are_bad_data.json.migrated
 points_are_bad_data.bak*
+data/
 
 # Coverage reports
 .coverage

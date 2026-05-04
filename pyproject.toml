@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "points-are-bad"
 version = "0.1.0"
-description = "F1 Prediction Game and Agent Orchestrator"
+description = "F1 Prediction Game — Web Dashboard"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
@@ -27,7 +27,6 @@ dev = [
 ]
 
 [project.scripts]
-points-are-bad     = "points_are_bad.cli:main_menu"
 points-are-bad-web = "web.server:run"
 
 # ---------------------------------------------------------------------------

@@ -23,7 +23,7 @@ Legacy JSON structure (auto-migrated to SQLite on first run)::
 Notes
 -----
 ``actual_results`` entries are always ``DriverResult`` dicts (``{"abbr": ..., "name": ...}``)
-once loaded.  Legacy plain-string entries from the manual-entry path in ``cli.py``
+once loaded.  Legacy plain-string entries from the manual-entry path
 are normalised to dicts by ``storage._migrate_json_to_sqlite`` during migration.
 """
 
