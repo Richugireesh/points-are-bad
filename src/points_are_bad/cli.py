@@ -170,33 +170,49 @@ def select_item(
 
 def auto_update_past_races(data: GameData) -> None:
     today = datetime.datetime.now().date().isoformat()
+    # Collect races with past dates and no results yet
+    pending = [
+        race
+        for race in data["races"]
+        if race.get("date") and race["date"] <= today and not race["actual_results"]
+    ]
+
+    if not pending:
+        return
+
+    clear_screen()
+    _header("Auto-updating past race results...")
+    print()
+
+    for race in pending:
+        print(f"  Fetching: {race['name']} ({_fmt_date(race.get('date', ''))}) ...")
+    print()
+
+    # Fetch results concurrently — both FastF1 and OpenF1 are I/O bound.
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     updated = False
-    first_update = True
-
-    for race in data["races"]:
-        r_date = race.get("date")
-        if r_date and r_date <= today and not race["actual_results"]:
-            if first_update:
-                clear_screen()
-                _header("Auto-updating past race results...")
-                print()
-                first_update = False
-
-            print(f"  Fetching: {race['name']} ({_fmt_date(r_date)}) ...")
-            year = int(r_date[:4])
-            fetched = fetch_results(year, race["name"])
-
+    with ThreadPoolExecutor(max_workers=min(4, len(pending))) as executor:
+        future_map = {
+            executor.submit(fetch_results, int(r["date"][:4]), r["name"]): r for r in pending
+        }
+        for future in as_completed(future_map):
+            race = future_map[future]
+            try:
+                fetched = future.result()
+            except Exception:
+                fetched = None
             if fetched:
                 race["actual_results"] = fetched
                 updated = True
-                print(f"  ✓  Results saved for {race['name']}\n")
+                print(f"  ✓  {race['name']}")
             else:
-                print("  -  Could not fetch results yet.\n")
+                print(f"  -  {race['name']} — not available yet")
 
     if updated:
         save_data(data)
-    if not first_update:
-        input("  Press Enter to continue to the Main Menu...")
+
+    input("\n  Press Enter to continue to the Main Menu...")
 
 
 # ---------------------------------------------------------------------------

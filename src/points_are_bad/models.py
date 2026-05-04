@@ -1,9 +1,11 @@
 """Shared TypedDict definitions for the points-are-bad data model.
 
-These types mirror the structure of ``points_are_bad_data.json`` and are used
-throughout the package to give mypy and editors a precise view of the data.
+These types are backed by SQLite tables (see ``storage.py`` for the schema)
+and are used throughout the package to give mypy and editors a precise view
+of the data.  The structure mirrors the original JSON format for backward
+compatibility with legacy data files.
 
-JSON structure::
+Legacy JSON structure (auto-migrated to SQLite on first run)::
 
     {
         "players": ["Alice", "Bob"],
@@ -20,8 +22,9 @@ JSON structure::
 
 Notes
 -----
-``actual_results`` may also contain plain strings from the manual-entry
-path in ``cli.py``.  The union ``DriverResult | str`` captures both forms.
+``actual_results`` entries are always ``DriverResult`` dicts (``{"abbr": ..., "name": ...}``)
+once loaded.  Legacy plain-string entries from the manual-entry path in ``cli.py``
+are normalised to dicts by ``storage._migrate_json_to_sqlite`` during migration.
 """
 
 from __future__ import annotations
@@ -44,19 +47,20 @@ class DriverResult(TypedDict):
 
 
 class RaceData(TypedDict):
-    """One Grand Prix entry stored in ``points_are_bad_data.json``."""
+    """One Grand Prix entry in the database."""
 
     name: str
     date: str
     # Always a list of DriverResult dicts — plain-string manual entries are
-    # normalised to {"name": ..., "abbr": ""} by storage._migrate() on load.
+    # normalised to {"name": ..., "abbr": ""} by storage._migrate_json_to_sqlite
+    # during migration.
     actual_results: list[DriverResult]
     # player name -> ordered list of canonical driver keys (lowercase)
     predictions: dict[str, list[str]]
 
 
 class GameData(TypedDict, total=False):
-    """Top-level structure of ``points_are_bad_data.json``.
+    """Top-level database state returned by ``storage.load_data()``.
 
     ``version`` is written by the storage layer to track the schema version.
     It is declared with ``total=False`` so callers and tests that construct

@@ -4,7 +4,7 @@ services:
     ports:
       - "${PORT:-5001}:5001"
     volumes:
-      # Persist the JSON data file across container restarts.
+      # Persist the SQLite database across container restarts.
       # Create the directory on the host first: mkdir -p ./data
       - ./data:/data
     environment:
@@ -14,6 +14,13 @@ services:
       # Set to "false" to disable rate limiting during local development.
       RATELIMIT_ENABLED: "${RATELIMIT_ENABLED:-true}"
     restart: unless-stopped
+    # Resource limits — conservative defaults for a small single-purpose app
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
     # Matches the HEALTHCHECK in the Dockerfile; compose uses it for depends_on.
     healthcheck:
       test: ["CMD", "python", "-c",
@@ -22,3 +29,31 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
+
+  # ── Tailscale sidecar ─────────────────────────────────────────────────────
+  # Exposes the web dashboard on your Tailscale tailnet (ts.net).
+  # Set TS_AUTHKEY and optionally TS_HOSTNAME in .env before starting.
+  # The dashboard will be available at https://<TS_HOSTNAME>.<tailnet>.ts.net
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: points-are-bad-ts
+    hostname: ${TS_HOSTNAME:-points-are-bad}
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY:?err}
+      - TS_HOSTNAME=${TS_HOSTNAME:-points-are-bad}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SERVE_PORT=5001
+      - TS_USERSPACE=false
+    volumes:
+      - ./tailscale/state:/var/lib/tailscale
+    network_mode: "service:web"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "tailscale", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

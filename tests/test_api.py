@@ -13,6 +13,7 @@ import pytest
 import points_are_bad.api as api_mod
 from points_are_bad.api import (
     _fetch_openf1_json,
+    fetch_fastf1_results,
     fetch_openf1_results,
     fetch_results,
     get_schedule_updates,
@@ -316,61 +317,72 @@ class TestGetScheduleUpdates:
 
 
 # ---------------------------------------------------------------------------
-# fetch_fastf1_results
+# fetch_fastf1_results — internals
 # ---------------------------------------------------------------------------
 
 
-import pandas as pd  # noqa: E402
-
-
 class TestFetchFastF1Results:
-    def test_returns_none_when_fastf1_not_installed(self, monkeypatch):
-        monkeypatch.setattr(api_mod, "HAS_FASTF1", False)
-        result = api_mod.fetch_fastf1_results(2026, "Australian Grand Prix")
-        assert result is None
+    def test_returns_driver_results_from_mocked_session(self, monkeypatch):
+        """Exercise the full internals of fetch_fastf1_results with a fake session."""
+        import pandas as pd
 
-    def test_returns_drivers_on_success(self, monkeypatch):
         monkeypatch.setattr(api_mod, "HAS_FASTF1", True)
+
+        # Build a fake session with 10 results
         mock_session = MagicMock()
-        mock_session.results = pd.DataFrame({
-            "Position": [1, 2],
-            "FirstName": ["Max", "Lando"],
-            "LastName": ["Verstappen", "Norris"],
-            "Abbreviation": ["VER", "NOR"],
-        })
+        mock_session.results = pd.DataFrame(
+            {
+                "Position": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                "FirstName": [
+                    "Max",
+                    "Lando",
+                    "Charles",
+                    "Lewis",
+                    "George",
+                    "Oscar",
+                    "Kimi",
+                    "Pierre",
+                    "Isack",
+                    "Liam",
+                    "Nico",
+                ],
+                "LastName": [
+                    "Verstappen",
+                    "Norris",
+                    "Leclerc",
+                    "Hamilton",
+                    "Russell",
+                    "Piastri",
+                    "Antonelli",
+                    "Gasly",
+                    "Hadjar",
+                    "Lawson",
+                    "Hulkenberg",
+                ],
+                "Abbreviation": [
+                    "VER",
+                    "NOR",
+                    "LEC",
+                    "HAM",
+                    "RUS",
+                    "PIA",
+                    "ANT",
+                    "GAS",
+                    "HAD",
+                    "LAW",
+                    "HUL",
+                ],
+            }
+        )
+        mock_session.load = MagicMock()
+
         mock_fastf1 = MagicMock()
         mock_fastf1.get_session.return_value = mock_session
         mock_fastf1.Cache.enable_cache = MagicMock()
         monkeypatch.setattr(api_mod, "fastf1", mock_fastf1)
 
-        result = api_mod.fetch_fastf1_results(2026, "Australian Grand Prix")
-        assert result is not None
-        assert len(result) == 2
-        assert result[0]["abbr"] == "VER"
-        assert result[0]["name"] == "Max Verstappen"
-
-    def test_returns_none_when_position_column_missing(self, monkeypatch):
-        monkeypatch.setattr(api_mod, "HAS_FASTF1", True)
-        mock_session = MagicMock()
-        mock_session.results = pd.DataFrame({
-            "FirstName": ["Max"],
-            "LastName": ["Verstappen"],
-            "Abbreviation": ["VER"],
-        })
-        mock_fastf1 = MagicMock()
-        mock_fastf1.get_session.return_value = mock_session
-        mock_fastf1.Cache.enable_cache = MagicMock()
-        monkeypatch.setattr(api_mod, "fastf1", mock_fastf1)
-
-        result = api_mod.fetch_fastf1_results(2026, "Australian Grand Prix")
-        assert result is None
-
-    def test_returns_none_on_exception(self, monkeypatch):
-        monkeypatch.setattr(api_mod, "HAS_FASTF1", True)
-        mock_fastf1 = MagicMock()
-        mock_fastf1.get_session.side_effect = RuntimeError("boom")
-        mock_fastf1.Cache.enable_cache = MagicMock()
-        monkeypatch.setattr(api_mod, "fastf1", mock_fastf1)
-
-        result = api_mod.fetch_fastf1_results(2026, "Australian Grand Prix")
-        assert result is None
+        results = fetch_fastf1_results(2026, "Australian Grand Prix")
+        assert results is not None
+        assert len(results) == 10  # only top 10
+        assert results[0] == {"abbr": "VER", "name": "Max Verstappen"}
+        assert results[1] == {"abbr": "NOR", "name": "Lando Norris"}

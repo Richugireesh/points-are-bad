@@ -20,7 +20,7 @@ A Python CLI and web dashboard for playing "Points are Bad" — a Formula 1 pred
 | Frontend | Vanilla HTML / CSS / JS — no build step, no framework |
 | F1 data (primary) | [FastF1](https://docs.fastf1.dev/) 3.x — official timing & results |
 | F1 data (fallback) | [OpenF1](https://openf1.org/) REST API via `urllib` |
-| Data storage | JSON flat-file with atomic writes and 3 rolling backups |
+| Data storage | SQLite with WAL journal mode; auto-migration from legacy JSON |
 | Testing | [pytest](https://pytest.org/) + [pytest-cov](https://pytest-cov.readthedocs.io/) (80% threshold enforced) |
 | CI | GitHub Actions (lint + test on push/PR) |
 | Linting | pre-commit hooks (ruff, mypy) |
@@ -41,32 +41,40 @@ uv pip install -e '.[dev,web]'   # CLI + Flask + Gunicorn + dev tools
 
 `[web]` pulls in Flask, flask-limiter, and Gunicorn. `[dev]` adds pytest, ruff, mypy, and pre-commit.
 
+## Migrating from JSON to SQLite
+
+The storage backend was migrated from a JSON flat-file to SQLite. Migration is automatic:
+
+1. On first run, if `points_are_bad_data.json` exists but `points_are_bad_data.db` does not, the JSON data is imported into SQLite automatically.
+2. The original JSON file is renamed to `points_are_bad_data.json.migrated` after a successful import — it is safe to delete.
+3. All existing rolling backup files (`.bak1`/`.bak2`/`.bak3`) are no longer used and can be removed.
+
+You can also trigger migration manually via Python:
+
+```bash
+.venv/bin/python -c "from points_are_bad.storage import _migrate_json_to_sqlite; import pathlib; _migrate_json_to_sqlite(pathlib.Path('points_are_bad_data.json'))"
+```
+
+The database uses WAL journal mode for concurrent read/write safety across threads and Gunicorn workers.
+
 ## CLI
 
 ```bash
 .venv/bin/points-are-bad
 ```
 
-Data is auto-created at `points_are_bad_data.json` in the working directory. Override with `POINTS_DATA_FILE=/path/to/file.json`. Player names are stored lowercase.
+Data is auto-created at `points_are_bad_data.db` in the working directory. Override with `POINTS_DATA_FILE` (the extension is swapped from `.json` to `.db` for the database; a `.json` file with the same name is used for legacy migration on first run).
 
 ## Web Dashboard
 
 ### Development (Flask dev server)
 
 ```bash
-# One-time install (if you haven't already)
-uv pip install -e '.[web]'
-
-# Then run
 uv run web/server.py            # → http://localhost:5001
 # or, after installing scripts:
 points-are-bad-web
 
 PORT=8080 points-are-bad-web   # custom port
-
-# Enable authentication (required for write endpoints)
-API_TOKEN=mysecret uv run web/server.py
-# Then enter the token in the dashboard header (stored in localStorage)
 ```
 
 ### Production (Gunicorn)
@@ -75,7 +83,7 @@ API_TOKEN=mysecret uv run web/server.py
 gunicorn -c gunicorn.conf.py web.server:app
 ```
 
-The `gunicorn.conf.py` pins `workers=1` (required — the threading.Lock used for JSON writes is in-process), `threads=4`, and logs to stdout/stderr. See the file for the full rationale.
+The `gunicorn.conf.py` defaults to `workers=2` with 4 threads each — SQLite WAL journal mode handles concurrent reads and writes safely across workers.
 
 ### Docker
 
@@ -89,9 +97,7 @@ mkdir -p data
 API_TOKEN=$(openssl rand -hex 32) docker compose up
 ```
 
-The Docker image uses a single-stage build with `uv`, runs as a non-root `pab` user, and includes a `docker-entrypoint.sh` that fixes volume permissions on startup. A `.dockerignore` excludes caches, tests, and dev files from the build context.
-
-`API_TOKEN` is a shared secret required by all write endpoints (`POST /predictions`, `POST /results`, `POST/DELETE /players`, `POST/DELETE /races`, `/races/fetch-results`). Without it, those endpoints are open — suitable only for local dev. Pass it as a `Bearer` token:
+`API_TOKEN` is a shared secret required by all write endpoints (`POST /predictions`, `POST /results`, `POST /players`). Without it, those endpoints are open — suitable only for local dev. Pass it as a `Bearer` token:
 
 ```bash
 curl -X POST http://localhost:5001/players \
@@ -105,17 +111,16 @@ curl -X POST http://localhost:5001/players \
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `5001` | TCP port the server listens on |
-| `POINTS_DATA_FILE` | `points_are_bad_data.json` | Path to the JSON data file |
+| `POINTS_DATA_FILE` | `points_are_bad_data.json` | Path to the database file (`.db` suffix is used; `.json` is kept for legacy migration) |
 | `API_TOKEN` | *(unset — open)* | Bearer token required for write endpoints |
 | `RATELIMIT_ENABLED` | `true` | Set to `false` to disable rate limiting |
 
 The dashboard provides:
-- **Season standings** with score bars (lowest score = largest bar) and delta from the leader
+- **Season standings** with score bars and delta from the leader
 - **Race log** — click any completed race to see a full position-by-position breakdown
 - **Pending predictions** — clicking an upcoming race shows who has submitted picks and who hasn't
 - **Prediction entry** — `+ PREDICT` opens a 3-step modal: select pilot → select race → pick P1–P10 from the driver roster
-- **New pilot creation / removal** — add or remove a player inline from step 1 of the prediction modal
-- **Auth token** — input in the header bar, persisted in localStorage; sent as `Bearer` with all write requests
+- **New pilot creation** — add a player inline from step 1 of the prediction modal
 
 ### Web API
 
@@ -128,10 +133,6 @@ All write endpoints require `Authorization: Bearer <API_TOKEN>` when `API_TOKEN`
 | `POST` | `/predictions` | Bearer | 60/hr, 10/min | Submit or overwrite a prediction |
 | `POST` | `/results` | Bearer | 30/hr, 5/min | Enter actual race results |
 | `POST` | `/players` | Bearer | 20/hr, 5/min | Add a new player |
-| `DELETE` | `/players` | Bearer | 20/hr, 5/min | Remove a player and all their predictions |
-| `POST` | `/races` | Bearer | 20/hr, 5/min | Add a race to the schedule |
-| `DELETE` | `/races` | Bearer | 20/hr, 5/min | Remove a race (must not have results) |
-| `POST` | `/races/fetch-results` | Bearer | 10/hr, 2/min | Auto-fetch results from FastF1/OpenF1 for a past race |
 
 `POST /predictions` body:
 ```json
@@ -160,13 +161,7 @@ Returns `409` if results are already entered for that race.
 ```json
 { "name": "alice" }
 ```
-Returns `409` if the player already exists (not `400` — so clients can distinguish "name taken" from "name invalid"). Player names are stored lowercase.
-
-`DELETE /players` body:
-```json
-{ "name": "alice" }
-```
-Removes the player and all their predictions from every race. Returns `404` if unknown.
+Returns `409` if the player already exists (not `400` — so clients can distinguish "name taken" from "name invalid").
 
 ## Testing
 
@@ -185,7 +180,7 @@ src/points_are_bad/
   cli.py        Interactive menus, input/output, orchestration
   scoring.py    Pure scoring logic; no I/O (fully unit-testable)
   api.py        FastF1 → OpenF1 → manual fallback chain for results
-  storage.py    JSON load/save (points_are_bad_data.json)
+  storage.py    SQLite persistence (points_are_bad_data.db) with WAL mode
   drivers.py    Hardcoded 2026 roster (22 drivers, 11 teams)
   models.py     TypedDicts: GameData, RaceData, DriverResult, DriverInfo
   exceptions.py PointsAreBadError hierarchy (ApiError, StorageError, …)
@@ -207,10 +202,10 @@ tests/
 
 ### Key data flow
 
-1. `cli.py:main_menu()` loads `GameData` from JSON via `storage.load_data()`.
+1. `cli.py:main_menu()` loads `GameData` from SQLite via `storage.load_data()`.
 2. On startup it calls `auto_update_past_races()` which fetches missing results via `api.fetch_results()`.
 3. Scoring is always delegated to `scoring.calculate_player_points_for_race()` — the single source of truth for per-race points. The web dashboard replicates this logic in JavaScript (`calcPlayerPoints` in `index.html`) and verifies it by fetching `ALIASES` from `/aliases` on load.
-4. All writes go through `storage.save_data()` (CLI) or directly via the Flask endpoints (web), both of which hold a `threading.Lock` during read-modify-write.
+4. All writes go through `storage.save_data()` (CLI) or targeted SQL operations via the web server. SQLite WAL mode ensures concurrent read/write safety without application-level locking.
 
 ### API quirk — FastF1 monkey-patches `requests`
 
@@ -222,11 +217,10 @@ Must call in sequence: `/meetings` → `/sessions` → `/session_result` → `/d
 
 ## Features
 
-- **Player management** — add/remove players via CLI or web dashboard (removal cleans up predictions).
-- **Race schedule** — add/remove/auto-populate from FastF1; dates kept in sync.
+- **Player management** — add/remove players via CLI or web dashboard.
+- **Race schedule** — auto-populate from FastF1; dates are kept in sync.
 - **Driver-select UI** — interactive picker grouped by team, available in both CLI and web.
 - **Automated result fetching** — FastF1 (official) → OpenF1 (community) → manual entry.
 - **Points breakdown** — per-position view for any race across all players.
-- **Season standings** — live table sorted by fewest points; bars scale inversely (best = widest).
+- **Season standings** — live table sorted by fewest points.
 - **Web dashboard** — aerospace-aesthetic dark-mode SPA; no build step required.
-- **Auth token UI** — enter `API_TOKEN` in the header; persisted in localStorage across sessions.

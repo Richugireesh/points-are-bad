@@ -138,22 +138,22 @@ class TestManagePlayers:
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         with patch.object(cli_mod, "save_data"):
             manage_players(sample_data)
-        assert "charlie" in sample_data["players"]
+        assert "Charlie" in sample_data["players"]
 
     def test_add_duplicate_player_no_change(self, monkeypatch, sample_data):
         original_count = len(sample_data["players"])
-        responses = iter(["1", "alice", "", "3"])  # alice already exists
+        responses = iter(["1", "Alice", "", "3"])  # Alice already exists
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         with patch.object(cli_mod, "save_data"):
             manage_players(sample_data)
         assert len(sample_data["players"]) == original_count
 
     def test_remove_player(self, monkeypatch, sample_data):
-        responses = iter(["2", "alice", "", "3"])
+        responses = iter(["2", "Alice", "", "3"])
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         with patch.object(cli_mod, "save_data"):
             manage_players(sample_data)
-        assert "alice" not in sample_data["players"]
+        assert "Alice" not in sample_data["players"]
 
     def test_remove_nonexistent_player(self, monkeypatch, sample_data):
         original = list(sample_data["players"])
@@ -324,45 +324,65 @@ class TestEnterPredictions:
     def test_edit_existing_prediction_cancel_does_not_save(self, monkeypatch, sample_data):
         """When a player already has a prediction and chooses 'c', nothing is saved."""
         existing = [
-            "verstappen", "norris", "leclerc", "hamilton", "russell",
-            "piastri", "antonelli", "gasly", "hadjar", "lawson",
+            "verstappen",
+            "norris",
+            "leclerc",
+            "hamilton",
+            "russell",
+            "piastri",
+            "antonelli",
+            "gasly",
+            "hadjar",
+            "lawson",
         ]
-        sample_data["races"][1]["predictions"]["alice"] = existing[:]
+        sample_data["races"][1]["predictions"]["Alice"] = existing[:]
 
-        responses = iter([
-            "1",  # select Australian GP (the only upcoming race)
-            "1",  # select alice (who already has a prediction)
-            "c",  # cancel edit
-        ])
+        responses = iter(
+            [
+                "1",  # select Australian GP (the only upcoming race)
+                "1",  # select Alice (who already has a prediction)
+                "c",  # cancel edit
+            ]
+        )
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         with patch.object(cli_mod, "save_data") as mock_save:
             enter_predictions(sample_data)
         mock_save.assert_not_called()
         # Prediction unchanged
-        assert sample_data["races"][1]["predictions"]["alice"] == existing
+        assert sample_data["races"][1]["predictions"]["Alice"] == existing
 
     def test_edit_existing_prediction_saves_updated(self, monkeypatch, sample_data):
         """When a player edits their prediction, the new one is stored."""
         old_pred = [
-            "verstappen", "norris", "leclerc", "hamilton", "russell",
-            "piastri", "antonelli", "gasly", "hadjar", "lawson",
+            "verstappen",
+            "norris",
+            "leclerc",
+            "hamilton",
+            "russell",
+            "piastri",
+            "antonelli",
+            "gasly",
+            "hadjar",
+            "lawson",
         ]
         new_pred = list(reversed(old_pred))
-        sample_data["races"][1]["predictions"]["alice"] = old_pred[:]
+        sample_data["races"][1]["predictions"]["Alice"] = old_pred[:]
 
-        responses = iter([
-            "1",  # select Australian GP
-            "1",  # select alice
-            "e",  # edit
-            "",   # Press Enter after save confirmation
-        ])
+        responses = iter(
+            [
+                "1",  # select Australian GP
+                "1",  # select Alice
+                "e",  # edit
+                "",  # Press Enter after save confirmation
+            ]
+        )
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         # Bypass the full picker UI — return a canned new prediction
         monkeypatch.setattr(cli_mod, "_build_prediction", lambda *a, **kw: new_pred)
         with patch.object(cli_mod, "save_data") as mock_save:
             enter_predictions(sample_data)
         mock_save.assert_called_once()
-        assert sample_data["races"][1]["predictions"]["alice"] == new_pred
+        assert sample_data["races"][1]["predictions"]["Alice"] == new_pred
 
     def test_build_prediction_prefill_pre_populates_picks(self, monkeypatch):
         """_build_prediction with prefill seeds the picker with existing drivers."""
@@ -439,7 +459,7 @@ class TestViewRacePoints:
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         view_race_points(sample_data)
         out = capsys.readouterr().out
-        assert "alice" in out or "bob" in out
+        assert "Alice" in out or "Bob" in out
 
     def test_no_race_selected(self, monkeypatch, sample_data):
         # Select out-of-range → None returned → function exits
@@ -458,8 +478,8 @@ class TestViewStandings:
         monkeypatch.setattr("builtins.input", lambda _: "")
         view_standings(sample_data)
         out = capsys.readouterr().out
-        assert "alice" in out
-        assert "bob" in out
+        assert "Alice" in out
+        assert "Bob" in out
 
     def test_no_players_shows_message(self, monkeypatch, capsys):
         data = {"players": [], "races": []}

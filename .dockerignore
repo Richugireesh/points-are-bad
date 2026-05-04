@@ -1,51 +1,38 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
 *.egg-info/
 dist/
 build/
-.eggs/
-*.egg
 .venv/
 venv/
-env/
 
-# FastF1 cache
+# FastF1 cache — generated at runtime
 fastf1_cache/
-
-# uv
-.uv/
 
 # Git
 .git/
 .gitignore
 
-# Tool caches
-.mypy_cache/
-.pytest_cache/
-.ruff_cache/
+# Tests & coverage
+tests/
 .coverage
+htmlcov/
 
-# IDE
+# Editor
 .idea/
 .vscode/
 *.swp
-*.swo
 
-# Data (mount as volume, don't bake into image)
+# OS
+.DS_Store
+
+# Data — generated at runtime, not part of the image
+points_are_bad_data.db
+points_are_bad_data.db.backup
 points_are_bad_data.json
+points_are_bad_data.json.migrated
 points_are_bad_data.bak*
-data/
 
-# Dev / test
-tests/
-target/
-
-# Docs / misc
-AGENTS.md
-CLAUDE.md
-AGENT_INSTRUCTIONS.md
-CONTRIBUTING.md
-docker-compose.yml
-.pre-commit-config.yaml
+# Tailscale state — runtime data, not part of the image
+tailscale/state/
