@@ -7,29 +7,31 @@ Usage:
 
 Environment variables:
     PORT              TCP port to listen on (default: 5001)
-    POINTS_DATA_FILE  Override path to the JSON data file
+    POINTS_DATA_FILE  Override path to the data file (SQLite database)
     API_TOKEN         Shared secret required for all write endpoints.
                       If unset, writes are open (suitable only for local/dev use).
     RATELIMIT_ENABLED Set to "false" to disable rate limiting (default: true).
 """
+
 from __future__ import annotations
 
 import datetime
 import functools
-import json
+import hmac
 import logging
 import os
 import pathlib
 import sys
-import threading
 from typing import Callable, TypeVar, Union
 
 from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
-# Make `points_are_bad` importable when invoked directly (uv run web/server.py)
-# without a full editable install.  The package always wins if already installed.
+# The `sys.path` manipulation below is required so that `uv run web/server.py`
+# works without a full editable install (e.g. in Docker, where Gunicorn imports
+# `web.server:app` directly).  When the package is installed via `pip install -e`,
+# the already-installed version takes precedence.
 _SRC = pathlib.Path(__file__).parent.parent / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
@@ -37,7 +39,17 @@ if str(_SRC) not in sys.path:
 from points_are_bad.api import fetch_results as _fetch_results
 from points_are_bad.drivers import ROSTER as _ROSTER
 from points_are_bad.scoring import ALIASES
-from points_are_bad.storage import load_data, save_data
+from points_are_bad.storage import (
+    add_player as _add_player,
+    add_race as _add_race,
+    find_player as _find_player,
+    find_race as _find_race,
+    load_data,
+    remove_player as _remove_player,
+    remove_race as _remove_race,
+    set_prediction as _set_prediction,
+    set_results as _set_results,
+)
 
 _VALID_DRIVER_KEYS: frozenset[str] = frozenset(d["key"] for d in _ROSTER)
 
@@ -63,14 +75,8 @@ app = Flask(__name__, static_folder=None)
 # before any application code runs.  16 KB is generous for any valid request.
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024  # 16 KB
 
-# Single threading.Lock is correct here because we enforce a single Gunicorn
-# worker (see gunicorn.conf.py).  Multiple workers would each have their own
-# lock, making it useless — the conf pins workers=1.
-_data_lock = threading.Lock()
-
 # ---------------------------------------------------------------------------
-# Rate limiting — in-memory storage is safe because workers=1 (see gunicorn.conf.py).
-# flask-limiter automatically disables limits when app.config["TESTING"] is True,
+# Rate limiting — flask-limiter automatically disables limits when
 # so the test suite is unaffected.  Set RATELIMIT_ENABLED=false to opt out in dev.
 # ---------------------------------------------------------------------------
 _rate_limit_enabled = os.environ.get("RATELIMIT_ENABLED", "true").lower() != "false"
@@ -94,6 +100,7 @@ _API_TOKEN: str | None = os.environ.get("API_TOKEN") or None
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _err(msg: str, code: int = 400) -> tuple[Response, int]:
     return jsonify({"error": msg}), code  # type: ignore[return-value]
 
@@ -109,20 +116,25 @@ def _validate_date(value: str) -> str | None:
 
 def _require_token(fn: _F) -> _F:
     """Decorator: reject requests missing the correct Bearer token when API_TOKEN is set."""
+
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):  # type: ignore[no-untyped-def]
         if _API_TOKEN is not None:
             auth = request.headers.get("Authorization", "")
-            if not auth.startswith("Bearer ") or auth[len("Bearer "):] != _API_TOKEN:
+            if not auth.startswith("Bearer ") or not hmac.compare_digest(
+                auth[len("Bearer ") :], _API_TOKEN
+            ):
                 log.warning("Unauthorized write attempt from %s", request.remote_addr)
                 return _err("Unauthorized", 401)
         return fn(*args, **kwargs)
+
     return wrapper  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------
 # Global error handlers — always return JSON, never HTML
 # ---------------------------------------------------------------------------
+
 
 @app.errorhandler(404)
 def _not_found(e: Exception) -> tuple[Response, int]:
@@ -154,6 +166,7 @@ def _internal(e: Exception) -> tuple[Response, int]:
 # Security headers — added to every response
 # ---------------------------------------------------------------------------
 
+
 @app.after_request
 def _security_headers(response: Response) -> Response:
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -165,6 +178,7 @@ def _security_headers(response: Response) -> Response:
 
 
 # ── Routes ──────────────────────────────────────────────────────────────────
+
 
 @app.route("/")
 def index() -> Response:
@@ -188,41 +202,42 @@ def aliases() -> Response:
 @_require_token
 def save_prediction() -> _RouteReturn:
     body = request.get_json(force=True, silent=True) or {}
-    player: str = str(body.get("player", "")).strip()
+    player: str = str(body.get("player", "")).strip().lower()
     race_name: str = str(body.get("race_name", "")).strip()
     prediction = body.get("prediction", [])
     overwrite: bool = bool(body.get("overwrite", False))
 
-    with _data_lock:
-        game = load_data()
+    if not _find_player(player):
+        return _err(f"Unknown player: {player}")
 
-        if player not in game["players"]:
-            return _err(f"Unknown player: {player}")
+    race = _find_race(race_name)
+    if race is None:
+        return _err(f"Unknown race: {race_name}")
 
-        race = next((r for r in game["races"] if r["name"] == race_name), None)
-        if race is None:
+    if race.get("actual_results"):
+        return _err("Results already entered for this race — no changes allowed")
+
+    race_date = race.get("date", "")
+    if race_date and race_date < datetime.date.today().isoformat():
+        return _err("Cannot submit prediction for a race that has already passed")
+
+    if not isinstance(prediction, list) or len(prediction) != 10:
+        return _err("Prediction must be a list of exactly 10 driver keys")
+
+    invalid = [k for k in prediction if k not in _VALID_DRIVER_KEYS]
+    if invalid:
+        return _err(f"Unknown driver keys: {', '.join(invalid)}")
+
+    existing_preds = race.get("predictions", {}).get(player)
+    if existing_preds and not overwrite:
+        return _err("Prediction already submitted for this race", 409)
+
+    try:
+        _set_prediction(race_name, player, prediction)
+    except Exception as e:
+        if "Unknown race" in str(e):
             return _err(f"Unknown race: {race_name}")
-
-        if race.get("actual_results"):
-            return _err("Results already entered for this race — no changes allowed")
-
-        race_date = race.get("date", "")
-        if race_date and race_date < datetime.date.today().isoformat():
-            return _err("Cannot submit prediction for a race that has already passed")
-
-        if not isinstance(prediction, list) or len(prediction) != 10:
-            return _err("Prediction must be a list of exactly 10 driver keys")
-
-        invalid = [k for k in prediction if k not in _VALID_DRIVER_KEYS]
-        if invalid:
-            return _err(f"Unknown driver keys: {', '.join(invalid)}")
-
-        preds = race.setdefault("predictions", {})
-        if player in preds and not overwrite:
-            return _err("Prediction already submitted for this race", 409)
-
-        preds[player] = prediction
-        save_data(game)
+        raise
 
     log.info("Prediction saved: player=%s race=%r", player, race_name)
     return jsonify({"ok": True})
@@ -247,21 +262,22 @@ def save_results() -> _RouteReturn:
         ):
             return _err("Each result entry must have non-empty 'name' and 'abbr' fields")
 
-    with _data_lock:
-        game = load_data()
+    race = _find_race(race_name)
+    if race is None:
+        return _err(f"Unknown race: {race_name}")
 
-        race = next((r for r in game["races"] if r["name"] == race_name), None)
-        if race is None:
+    if race.get("actual_results"):
+        return _err("Results already entered for this race", 409)
+
+    cleaned = [
+        {"name": str(e["name"]).strip(), "abbr": str(e["abbr"]).strip().upper()} for e in results
+    ]
+    try:
+        _set_results(race_name, cleaned)
+    except Exception as e:
+        if "Unknown race" in str(e):
             return _err(f"Unknown race: {race_name}")
-
-        if race.get("actual_results"):
-            return _err("Results already entered for this race", 409)
-
-        race["actual_results"] = [
-            {"name": str(e["name"]).strip(), "abbr": str(e["abbr"]).strip().upper()}
-            for e in results
-        ]
-        save_data(game)
+        raise
 
     log.info("Results saved: race=%r", race_name)
     return jsonify({"ok": True})
@@ -277,29 +293,30 @@ def fetch_race_results() -> _RouteReturn:
     if not race_name:
         return _err("race_name is required")
 
-    with _data_lock:
-        game = load_data()
+    race = _find_race(race_name)
+    if race is None:
+        return _err(f"Unknown race: {race_name}", 404)
 
-        race = next((r for r in game["races"] if r["name"] == race_name), None)
-        if race is None:
+    if race.get("actual_results"):
+        return _err("Results already entered for this race", 409)
+
+    race_date = race.get("date", "")
+    if race_date and race_date > datetime.date.today().isoformat():
+        return _err("Race has not happened yet", 400)
+
+    year = int(race_date[:4]) if race_date else datetime.date.today().year
+    log.info("Fetching results for %r (%s)...", race_name, year)
+
+    results = _fetch_results(year, race_name)
+    if not results:
+        return _err("Results not available yet — try again after the race", 404)
+
+    try:
+        _set_results(race_name, results)
+    except Exception as e:
+        if "Unknown race" in str(e):
             return _err(f"Unknown race: {race_name}", 404)
-
-        if race.get("actual_results"):
-            return _err("Results already entered for this race", 409)
-
-        race_date = race.get("date", "")
-        if race_date and race_date > datetime.date.today().isoformat():
-            return _err("Race has not happened yet", 400)
-
-        year = int(race_date[:4]) if race_date else datetime.date.today().year
-        log.info("Fetching results for %r (%s)...", race_name, year)
-
-        results = _fetch_results(year, race_name)
-        if not results:
-            return _err("Results not available yet — try again after the race", 404)
-
-        race["actual_results"] = results
-        save_data(game)
+        raise
 
     log.info("Auto-fetched results for %r (%d drivers)", race_name, len(results))
     return jsonify({"ok": True, "count": len(results)})
@@ -321,21 +338,12 @@ def add_race() -> _RouteReturn:
     if date_str and _validate_date(date_str) is None:
         return _err("Invalid date format — use YYYY-MM-DD")
 
-    with _data_lock:
-        game = load_data()
-
-        if any(r["name"].lower() == name.lower() for r in game["races"]):
+    try:
+        _add_race(name, date_str)
+    except Exception as e:
+        if "already exists" in str(e):
             return _err(f"Race '{name}' already exists", 409)
-
-        game["races"].append({
-            "name": name,
-            "date": date_str,
-            "actual_results": [],
-            "predictions": {},
-        })
-        # Keep races sorted by date (dateless races sort to the end)
-        game["races"].sort(key=lambda r: r.get("date") or "9999-12-31")
-        save_data(game)
+        raise
 
     log.info("Race added: %r (%s)", name, date_str or "no date")
     return jsonify({"ok": True, "name": name})
@@ -351,18 +359,19 @@ def delete_race() -> _RouteReturn:
     if not race_name:
         return _err("race_name is required")
 
-    with _data_lock:
-        game = load_data()
+    race = _find_race(race_name)
+    if race is None:
+        return _err(f"Unknown race: {race_name}", 404)
 
-        race = next((r for r in game["races"] if r["name"] == race_name), None)
-        if race is None:
+    if race.get("actual_results"):
+        return _err("Cannot remove a race that already has results entered", 409)
+
+    try:
+        _remove_race(race_name)
+    except Exception as e:
+        if "Unknown race" in str(e):
             return _err(f"Unknown race: {race_name}", 404)
-
-        if race.get("actual_results"):
-            return _err("Cannot remove a race that already has results entered", 409)
-
-        game["races"].remove(race)
-        save_data(game)
+        raise
 
     log.info("Race removed: %r", race_name)
     return jsonify({"ok": True})
@@ -380,20 +389,40 @@ def add_player() -> _RouteReturn:
     if len(name) > 30:
         return _err("Player name too long (max 30 characters)")
 
-    with _data_lock:
-        game = load_data()
-
-        if name in game["players"]:
+    try:
+        _add_player(name)
+    except Exception as e:
+        if "already exists" in str(e):
             return _err(f"Player '{name}' already exists", 409)
-
-        game["players"].append(name)
-        save_data(game)
+        raise
 
     log.info("Player added: %s", name)
     return jsonify({"ok": True, "name": name})
 
 
+@app.route("/players", methods=["DELETE"])
+@limiter.limit("20 per hour; 5 per minute")
+@_require_token
+def remove_player() -> _RouteReturn:
+    body = request.get_json(force=True, silent=True) or {}
+    name: str = str(body.get("name", "")).strip().lower()
+
+    if not name:
+        return _err("Player name is required")
+
+    try:
+        _remove_player(name)
+    except Exception as e:
+        if "Unknown player" in str(e):
+            return _err(f"Unknown player: {name}", 404)
+        raise
+
+    log.info("Player removed: %s", name)
+    return jsonify({"ok": True})
+
+
 # ── Entry point ─────────────────────────────────────────────────────────────
+
 
 def run() -> None:
     port = int(os.environ.get("PORT", "5001"))

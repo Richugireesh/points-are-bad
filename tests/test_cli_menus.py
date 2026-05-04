@@ -324,16 +324,26 @@ class TestEnterPredictions:
     def test_edit_existing_prediction_cancel_does_not_save(self, monkeypatch, sample_data):
         """When a player already has a prediction and chooses 'c', nothing is saved."""
         existing = [
-            "verstappen", "norris", "leclerc", "hamilton", "russell",
-            "piastri", "antonelli", "gasly", "hadjar", "lawson",
+            "verstappen",
+            "norris",
+            "leclerc",
+            "hamilton",
+            "russell",
+            "piastri",
+            "antonelli",
+            "gasly",
+            "hadjar",
+            "lawson",
         ]
         sample_data["races"][1]["predictions"]["Alice"] = existing[:]
 
-        responses = iter([
-            "1",  # select Australian GP (the only upcoming race)
-            "1",  # select Alice (who already has a prediction)
-            "c",  # cancel edit
-        ])
+        responses = iter(
+            [
+                "1",  # select Australian GP (the only upcoming race)
+                "1",  # select Alice (who already has a prediction)
+                "c",  # cancel edit
+            ]
+        )
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         with patch.object(cli_mod, "save_data") as mock_save:
             enter_predictions(sample_data)
@@ -344,18 +354,28 @@ class TestEnterPredictions:
     def test_edit_existing_prediction_saves_updated(self, monkeypatch, sample_data):
         """When a player edits their prediction, the new one is stored."""
         old_pred = [
-            "verstappen", "norris", "leclerc", "hamilton", "russell",
-            "piastri", "antonelli", "gasly", "hadjar", "lawson",
+            "verstappen",
+            "norris",
+            "leclerc",
+            "hamilton",
+            "russell",
+            "piastri",
+            "antonelli",
+            "gasly",
+            "hadjar",
+            "lawson",
         ]
         new_pred = list(reversed(old_pred))
         sample_data["races"][1]["predictions"]["Alice"] = old_pred[:]
 
-        responses = iter([
-            "1",  # select Australian GP
-            "1",  # select Alice
-            "e",  # edit
-            "",   # Press Enter after save confirmation
-        ])
+        responses = iter(
+            [
+                "1",  # select Australian GP
+                "1",  # select Alice
+                "e",  # edit
+                "",  # Press Enter after save confirmation
+            ]
+        )
         monkeypatch.setattr("builtins.input", lambda _: next(responses))
         # Bypass the full picker UI — return a canned new prediction
         monkeypatch.setattr(cli_mod, "_build_prediction", lambda *a, **kw: new_pred)

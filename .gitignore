@@ -17,8 +17,18 @@ fastf1_cache/
 # uv
 .uv/
 
-# Data files (optional - remove if you want to track these)
-# points_are_bad_data.json
+# Data files — these are generated at runtime
+points_are_bad_data.db
+points_are_bad_data.json
+points_are_bad_data.json.migrated
+points_are_bad_data.bak*
+
+# Coverage reports
+.coverage
+htmlcov/
+
+# Environment secrets
+.env
 
 # IDE
 .idea/
@@ -29,3 +39,7 @@ fastf1_cache/
 # OS
 .DS_Store
 Thumbs.db
+
+# Tailscale state — runtime data
+tailscale/state/*
+!tailscale/state/.gitkeep

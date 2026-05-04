@@ -16,7 +16,7 @@ uv run web/server.py
 # or after installing scripts:
 points-are-bad-web
 
-# Run web dashboard — production (Gunicorn, workers=1 required — see gunicorn.conf.py)
+# Run web dashboard — production (Gunicorn, SQLite WAL handles concurrency — see gunicorn.conf.py)
 gunicorn -c gunicorn.conf.py web.server:app
 
 # Docker
@@ -45,14 +45,14 @@ Source lives under `src/points_are_bad/`. **Module responsibilities:**
 - `cli.py` — Primary entry point. Full terminal UI: menus, input loops, box-drawing display, and orchestration. No scoring math or HTTP requests live here.
 - `scoring.py` — Pure game logic with no external imports. `calculate_str_equality()` does flexible driver name matching (case-insensitive, alias-aware substrings). `calculate_season_standings()` aggregates scores. `ALIASES` dict is the single source of truth for driver shorthands — the web API exposes it via `GET /aliases`.
 - `api.py` — FastF1 (primary) → OpenF1 (fallback) → manual entry. **Critical quirk:** FastF1 monkey-patches `requests` with aggressive caching, so all OpenF1 calls must use `urllib.request`, never `requests`.
-- `storage.py` — Loads/saves `points_are_bad_data.json`. Override path with `POINTS_DATA_FILE` env var.
+- `storage.py` — SQLite persistence with WAL journal mode for concurrent read/write safety across threads and Gunicorn workers. Falls back to auto-migration from legacy JSON files on first run. Override path with `POINTS_DATA_FILE` env var.
 - `drivers.py` — Hardcoded 2026 grid (22 drivers). Predictions are stored as canonical driver `key` values from this file.
 - `models.py` — `TypedDict` definitions (`GameData`, `RaceData`, `DriverResult`, `DriverInfo`) mirroring the JSON structure. `actual_results` entries can be `DriverResult` dicts (API path) or plain strings (manual entry).
 - `exceptions.py` — Exception hierarchy rooted at `PointsAreBadError`: `ApiError`, `StorageError`, `DataValidationError`.
 
 **Web layer** lives under `web/`:
 
-- `web/server.py` — Flask server. Endpoints: `GET /data`, `GET /aliases`, `POST /predictions`, `POST /results`, `POST /players`. All writes use `_data_lock` (threading.Lock). Errors use `_err(msg, code)` helper; duplicates return 409 so clients can distinguish them from invalid-input 400s. Write endpoints are protected by Bearer token auth (`API_TOKEN` env var) and per-route rate limits via flask-limiter. Request bodies are capped at 16 KB (`MAX_CONTENT_LENGTH`). Rate limiting is disabled in tests by monkeypatching `limiter.enabled = False` in the `client` fixture.
+- `web/server.py` — Flask server. Endpoints: `GET /data`, `GET /aliases`, `POST /predictions`, `POST /results`, `POST /players`. Targeted storage operations use SQLite WAL for concurrency — no application-level lock needed. Errors use `_err(msg, code)` helper; duplicates return 409 so clients can distinguish them from invalid-input 400s. Write endpoints are protected by Bearer token auth (`API_TOKEN` env var) and per-route rate limits via flask-limiter. Request bodies are capped at 16 KB (`MAX_CONTENT_LENGTH`). Rate limiting is disabled in tests by monkeypatching `limiter.enabled = False` in the `client` fixture.
 - `web/index.html` — Single-page dashboard. No build step. Fetches `/aliases` on load and merges into local `ALIASES` dict. JS scoring (`calcPlayerPoints`) mirrors `scoring.py` exactly.
 
 ## API Quirks
@@ -63,20 +63,12 @@ Source lives under `src/points_are_bad/`. **Module responsibilities:**
 
 ## Data Model
 
-JSON structure in `points_are_bad_data.json`:
-```json
-{
-  "players": ["Alice", "Bob"],
-  "races": [{
-    "name": "Australian Grand Prix",
-    "date": "2026-03-08",
-    "actual_results": [{"name": "Max Verstappen", "abbr": "VER"}, ...],
-    "predictions": {
-      "Alice": ["verstappen", "norris", ...],
-      "Bob": ["leclerc", "piastri", ...]
-    }
-  }]
-}
+SQLite schema in `points_are_bad_data.db`:
+```sql
+players(name TEXT PRIMARY KEY)
+races(id INTEGER PK AUTOINCREMENT, name TEXT UNIQUE, date TEXT DEFAULT '')
+race_results(race_id FK→races, position INTEGER, abbr TEXT, driver_name TEXT, PK(race_id, position))
+predictions(race_id FK→races, player_name FK→players, position INTEGER, driver_key TEXT, PK(race_id, player_name, position))
 ```
 
 Predictions are stored as lowercase driver keys (from `drivers.py`); `actual_results` entries are dicts with `name`/`abbr`.

@@ -7,7 +7,10 @@ expected keys are present.
 
 from __future__ import annotations
 
-from points_are_bad.models import DriverInfo, DriverResult, GameData, RaceData
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from points_are_bad.models import DriverInfo, DriverResult, GameData, RaceData
 
 
 class TestDriverResult:

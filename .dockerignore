@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# FastF1 cache — generated at runtime
+fastf1_cache/
+
+# Git
+.git/
+.gitignore
+
+# Tests & coverage
+tests/
+.coverage
+htmlcov/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Data — generated at runtime, not part of the image
+points_are_bad_data.db
+points_are_bad_data.db.backup
+points_are_bad_data.json
+points_are_bad_data.json.migrated
+points_are_bad_data.bak*
+
+# Tailscale state — runtime data, not part of the image
+tailscale/state/

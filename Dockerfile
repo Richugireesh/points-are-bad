@@ -13,8 +13,7 @@ COPY src/ ./src/
 
 # Install the package and its web dependencies into a venv under /build/.venv
 RUN uv venv .venv && \
-    uv pip install --no-cache -e ".[web]" && \
-    uv pip install --no-cache gunicorn
+    uv pip install --no-cache -e ".[web]"
 
 # ── Stage 2: runtime image ───────────────────────────────────────────────────
 FROM python:3.12-slim AS runtime
@@ -29,6 +28,7 @@ COPY --from=builder /build/.venv /app/.venv
 COPY --from=builder /build/src /app/src
 COPY web/ ./web/
 COPY gunicorn.conf.py ./
+COPY docker-entrypoint.sh /usr/local/bin/
 
 # Persistent data volume — mount a host directory here to survive container restarts
 VOLUME ["/data"]
@@ -48,4 +48,5 @@ EXPOSE 5001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5001/aliases')"
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["gunicorn", "-c", "gunicorn.conf.py", "web.server:app"]

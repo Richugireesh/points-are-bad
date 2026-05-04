@@ -20,7 +20,7 @@ A Python CLI and web dashboard for playing "Points are Bad" — a Formula 1 pred
 | Frontend | Vanilla HTML / CSS / JS — no build step, no framework |
 | F1 data (primary) | [FastF1](https://docs.fastf1.dev/) 3.x — official timing & results |
 | F1 data (fallback) | [OpenF1](https://openf1.org/) REST API via `urllib` |
-| Data storage | JSON flat-file with atomic writes and 3 rolling backups |
+| Data storage | SQLite with WAL journal mode; auto-migration from legacy JSON |
 | Testing | [pytest](https://pytest.org/) + [pytest-cov](https://pytest-cov.readthedocs.io/) (80% threshold enforced) |
 | CI | GitHub Actions (lint + test on push/PR) |
 | Linting | pre-commit hooks (ruff, mypy) |
@@ -41,13 +41,29 @@ uv pip install -e '.[dev,web]'   # CLI + Flask + Gunicorn + dev tools
 
 `[web]` pulls in Flask, flask-limiter, and Gunicorn. `[dev]` adds pytest, ruff, mypy, and pre-commit.
 
+## Migrating from JSON to SQLite
+
+The storage backend was migrated from a JSON flat-file to SQLite. Migration is automatic:
+
+1. On first run, if `points_are_bad_data.json` exists but `points_are_bad_data.db` does not, the JSON data is imported into SQLite automatically.
+2. The original JSON file is renamed to `points_are_bad_data.json.migrated` after a successful import — it is safe to delete.
+3. All existing rolling backup files (`.bak1`/`.bak2`/`.bak3`) are no longer used and can be removed.
+
+You can also trigger migration manually via Python:
+
+```bash
+.venv/bin/python -c "from points_are_bad.storage import _migrate_json_to_sqlite; import pathlib; _migrate_json_to_sqlite(pathlib.Path('points_are_bad_data.json'))"
+```
+
+The database uses WAL journal mode for concurrent read/write safety across threads and Gunicorn workers.
+
 ## CLI
 
 ```bash
 .venv/bin/points-are-bad
 ```
 
-Data is auto-created at `points_are_bad_data.json` in the working directory. Override with `POINTS_DATA_FILE=/path/to/file.json`.
+Data is auto-created at `points_are_bad_data.db` in the working directory. Override with `POINTS_DATA_FILE` (the extension is swapped from `.json` to `.db` for the database; a `.json` file with the same name is used for legacy migration on first run).
 
 ## Web Dashboard
 
@@ -67,7 +83,7 @@ PORT=8080 points-are-bad-web   # custom port
 gunicorn -c gunicorn.conf.py web.server:app
 ```
 
-The `gunicorn.conf.py` pins `workers=1` (required — the threading.Lock used for JSON writes is in-process), `threads=4`, and logs to stdout/stderr. See the file for the full rationale.
+The `gunicorn.conf.py` defaults to `workers=2` with 4 threads each — SQLite WAL journal mode handles concurrent reads and writes safely across workers.
 
 ### Docker
 
@@ -95,7 +111,7 @@ curl -X POST http://localhost:5001/players \
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `5001` | TCP port the server listens on |
-| `POINTS_DATA_FILE` | `points_are_bad_data.json` | Path to the JSON data file |
+| `POINTS_DATA_FILE` | `points_are_bad_data.json` | Path to the database file (`.db` suffix is used; `.json` is kept for legacy migration) |
 | `API_TOKEN` | *(unset — open)* | Bearer token required for write endpoints |
 | `RATELIMIT_ENABLED` | `true` | Set to `false` to disable rate limiting |
 
@@ -164,7 +180,7 @@ src/points_are_bad/
   cli.py        Interactive menus, input/output, orchestration
   scoring.py    Pure scoring logic; no I/O (fully unit-testable)
   api.py        FastF1 → OpenF1 → manual fallback chain for results
-  storage.py    JSON load/save (points_are_bad_data.json)
+  storage.py    SQLite persistence (points_are_bad_data.db) with WAL mode
   drivers.py    Hardcoded 2026 roster (22 drivers, 11 teams)
   models.py     TypedDicts: GameData, RaceData, DriverResult, DriverInfo
   exceptions.py PointsAreBadError hierarchy (ApiError, StorageError, …)
@@ -186,10 +202,10 @@ tests/
 
 ### Key data flow
 
-1. `cli.py:main_menu()` loads `GameData` from JSON via `storage.load_data()`.
+1. `cli.py:main_menu()` loads `GameData` from SQLite via `storage.load_data()`.
 2. On startup it calls `auto_update_past_races()` which fetches missing results via `api.fetch_results()`.
 3. Scoring is always delegated to `scoring.calculate_player_points_for_race()` — the single source of truth for per-race points. The web dashboard replicates this logic in JavaScript (`calcPlayerPoints` in `index.html`) and verifies it by fetching `ALIASES` from `/aliases` on load.
-4. All writes go through `storage.save_data()` (CLI) or directly via the Flask endpoints (web), both of which hold a `threading.Lock` during read-modify-write.
+4. All writes go through `storage.save_data()` (CLI) or targeted SQL operations via the web server. SQLite WAL mode ensures concurrent read/write safety without application-level locking.
 
 ### API quirk — FastF1 monkey-patches `requests`
 

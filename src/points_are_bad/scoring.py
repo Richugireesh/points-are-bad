@@ -13,6 +13,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from .models import DriverResult, GameData
 
     _ActualEntry = Union[DriverResult, str]  # str kept for legacy callers only
@@ -133,8 +135,8 @@ def score_position(
 
 
 def calculate_player_points_for_race(
-    prediction: list[str],
-    actual: list[_ActualEntry],
+    prediction: Sequence[str],
+    actual: Sequence[_ActualEntry],
 ) -> int:
     """Total points for one player in one race.
 

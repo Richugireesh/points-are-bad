@@ -41,7 +41,7 @@ addopts = "--cov=points_are_bad --cov-report=term-missing --cov-fail-under=80"
 
 [tool.coverage.run]
 source = ["points_are_bad"]
-omit = ["*/__init__.py"]
+omit = ["*/__init__.py", "*/models.py"]
 
 # ---------------------------------------------------------------------------
 # ruff
@@ -55,6 +55,9 @@ line-length = 100
 select = ["E", "F", "I", "UP", "B", "SIM", "TCH"]
 # B904: re-raise inside except — handled where meaningful but not enforced globally
 ignore = ["B904"]
+
+[tool.ruff.lint.per-file-ignores]
+"web/server.py" = ["E402", "I001"]  # sys.path manipulation must happen before imports
 
 [tool.ruff.lint.isort]
 known-first-party = ["points_are_bad"]

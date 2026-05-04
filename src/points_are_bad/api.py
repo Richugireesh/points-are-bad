@@ -69,7 +69,6 @@ def _fetch_openf1_json(url: str) -> list[Any] | dict[str, Any] | None:
         urllib.error.HTTPError,
         TimeoutError,
         json.JSONDecodeError,
-        OSError,
     ) as e:
         _log.warning("Error fetching %s: %s", url, e)
         return None
