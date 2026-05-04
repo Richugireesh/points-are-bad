@@ -56,7 +56,7 @@ __all__ = [
 _JSON_FILE = os.environ.get("POINTS_DATA_FILE", "points_are_bad_data.json")
 _DB_PATH = pathlib.Path(_JSON_FILE).with_suffix(".db")
 DATA_DB_FILE = str(_DB_PATH)
-DATA_FILE = _JSON_FILE  # kept for backward compat with web/server imports
+DATA_FILE = _JSON_FILE  # kept for backward compat with test imports
 
 # Current schema version — bump when changing the SQLite schema.
 _SCHEMA_VERSION = 1
