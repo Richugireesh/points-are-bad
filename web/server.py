@@ -41,6 +41,7 @@ from points_are_bad.api import fetch_results as _fetch_results
 from points_are_bad.drivers import ROSTER as _ROSTER
 from points_are_bad.scoring import ALIASES
 from points_are_bad.storage import (
+    DATA_DB_FILE,
     add_player as _add_player,
     add_race as _add_race,
     find_player as _find_player,
@@ -203,6 +204,15 @@ def data() -> Response:
 def aliases() -> Response:
     """Return the driver alias table from scoring.py so the frontend stays in sync."""
     return jsonify(ALIASES)
+
+
+@app.route("/health")
+def health() -> Response:
+    """Health check — used by Docker, Compose, and load balancers."""
+    db_ok = pathlib.Path(DATA_DB_FILE).exists()
+    return jsonify(
+        {"status": "ok" if db_ok else "degraded", "db": "ok" if db_ok else "unavailable"}
+    )
 
 
 @app.route("/predictions", methods=["POST"])

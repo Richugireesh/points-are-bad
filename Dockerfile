@@ -46,7 +46,7 @@ USER pab
 EXPOSE 5001
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5001/aliases')"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["gunicorn", "-c", "gunicorn.conf.py", "web.server:app"]
