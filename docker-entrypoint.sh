@@ -4,7 +4,7 @@
 
 set -e
 
-DATA_DIR=$(dirname "${POINTS_DATA_FILE:-/data/points_are_bad_data.json}")
+DATA_DIR=$(dirname "${POINTS_DATA_FILE:-/data/points_are_bad_data.db}")
 
 mkdir -p "$DATA_DIR"
 

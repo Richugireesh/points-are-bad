@@ -98,7 +98,6 @@ def fetch_fastf1_results(year: int, race_name: str) -> Optional[list[DriverResul
     _log.info("Fetching official FastF1 data for %s (%s)...", race_name, year)
     _setup_fastf1_cache()
     try:
-
         session = fastf1.get_session(year, race_name, "R")
         session.load(telemetry=False, laps=False, weather=False)
 

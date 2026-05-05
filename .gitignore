@@ -21,7 +21,6 @@ fastf1_cache/
 points_are_bad_data.db*
 points_are_bad_data.json
 points_are_bad_data.json.migrated
-points_are_bad_data.bak*
 data/
 
 # Coverage reports

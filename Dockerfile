@@ -33,7 +33,7 @@ COPY docker-entrypoint.sh /usr/local/bin/
 # Persistent data volume — mount a host directory here to survive container restarts
 VOLUME ["/data"]
 
-ENV POINTS_DATA_FILE=/data/points_are_bad_data.json \
+ENV POINTS_DATA_FILE=/data/points_are_bad_data.db \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"

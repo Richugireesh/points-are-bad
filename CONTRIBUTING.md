@@ -29,7 +29,7 @@ gunicorn -c gunicorn.conf.py web.server:app
 Override the data file path or set auth for local testing:
 
 ```bash
-POINTS_DATA_FILE=/tmp/test_data.json uv run web/server.py
+POINTS_DATA_FILE=/tmp/test_data.db uv run web/server.py
 
 # Enable token auth locally
 API_TOKEN=mysecret uv run web/server.py

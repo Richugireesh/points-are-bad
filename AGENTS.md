@@ -20,19 +20,18 @@ CI runs `ruff check` + `ruff format --check` + `mypy src/` + `pytest tests/ -v` 
 
 ## Architecture
 
-The app is a CLI/TUI F1 prediction game — players predict Top-10 finishers, lowest score wins.
+The app is an F1 prediction game — players predict Top-10 finishers, lowest score wins.
 
 Source lives under `src/points_are_bad/`. Module boundaries are strict:
 - `scoring.py` — pure logic, **stdlib only**. No I/O, no external imports.
 - `api.py` — FastF1 → OpenF1 → manual fallback for fetching race results. Cache-dir setup centralized in `_setup_fastf1_cache()`.
-- `storage.py` — JSON read/write with atomic saves and 3 rolling backups.
-- `cli.py` — all I/O and orchestration; no scoring math, no HTTP.
+- `storage.py` — SQLite persistence with WAL journal mode; auto-migration from legacy JSON.
 - `drivers.py` — hardcoded 2026 grid (22 drivers). Predictions use lowercase `key` values from here.
 - `models.py` — TypedDicts: `GameData`, `RaceData`, `DriverResult`, `DriverInfo`.
 - `exceptions.py` — `PointsAreBadError` → `ApiError`, `StorageError`, `DataValidationError`.
 
 Web layer (`web/`):
-- `server.py` — Flask. Write endpoints require Bearer `API_TOKEN`. All mutations hold `_data_lock`.
+- `server.py` — Flask. Write endpoints require Bearer `API_TOKEN`. SQLite WAL handles concurrency.
 - `index.html` — vanilla HTML/CSS/JS dashboard. No build step. JS scoring mirrors `scoring.py` exactly.
 
 ## API quirks — DO NOT BREAK THESE
@@ -43,7 +42,7 @@ Web layer (`web/`):
 
 ## Web server gotchas
 
-**`workers=1` is mandatory** in Gunicorn. The `threading.Lock` for JSON writes is in-process memory. Multiple workers each get their own lock copy → corrupt writes. `threads=4` is safe.
+**`workers` defaults to 2** in Gunicorn. SQLite WAL mode handles concurrent access safely across workers and threads. `threads=4` is the default.
 
 **409 vs 400:** Write endpoints return `409` when a duplicate already exists, `400` for malformed input. `DELETE` endpoints return `404` for unknown resources. The dashboard JS relies on this distinction.
 
@@ -51,7 +50,7 @@ Web layer (`web/`):
 
 **Token auth** uses `hmac.compare_digest` for timing-safe comparison. New auth checks must do the same.
 
-**Player names are lowercase** — enforced by both `POST /players` and CLI `manage_players`. The prediction endpoint lowercases the player field before lookup.
+**Player names are lowercase** — enforced by both `POST /players` and the prediction endpoint lowercases the player field before lookup.
 
 **Rate limiting** is disabled in tests: the `client` fixture in `tests/test_web_server.py` monkeypatches `limiter.enabled = False`. New web tests must do the same.
 
@@ -67,7 +66,7 @@ Single-stage build with `uv`, non-root `pab` user. The `docker-entrypoint.sh` sc
 
 ## Testing
 
-- Two fixtures in `conftest.py`: `sample_data` (minimal GameData) and `no_clear_screen` (autouse, monkeypatches `os.system` to prevent terminal clears during test runs).
+- The `isolated_test_db` fixture (autouse) in `conftest.py` redirects storage to a temp SQLite database for every test session.
 - Coverage scope is `points_are_bad` (the `src/` package, not `web/`). Threshold: 80%, enforced by `pytest-cov`.
 - Use `--no-cov` to skip coverage when iterating on tests.
 

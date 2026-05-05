@@ -103,7 +103,7 @@ curl -X POST http://localhost:5001/players \
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `5001` | TCP port the server listens on |
-| `POINTS_DATA_FILE` | `points_are_bad_data.json` | Path to the database file (`.db` suffix is used; `.json` is kept for legacy migration) |
+| `POINTS_DATA_FILE` | `points_are_bad_data.db` | Path to the SQLite database file |
 | `API_TOKEN` | *(unset — open)* | Bearer token required for write endpoints |
 | `RATELIMIT_ENABLED` | `true` | Set to `false` to disable rate limiting |
 
@@ -181,7 +181,7 @@ web/
   index.html    Single-page dashboard (pure HTML/CSS/JS, no build step)
 
 tests/
-  conftest.py           Shared fixtures (sample_data, isolated_test_db)
+  conftest.py           Shared fixtures (isolated_test_db)
   test_scoring.py       100% coverage of scoring.py
   test_storage.py       Round-trip + error-path tests — 100% storage.py
   test_drivers.py       Roster integrity, lookup helpers

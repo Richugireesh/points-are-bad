@@ -52,11 +52,13 @@ __all__ = [
     "set_results",
 ]
 
-# Point at the JSON file (legacy / migration source) and the SQLite database.
-_JSON_FILE = os.environ.get("POINTS_DATA_FILE", "points_are_bad_data.json")
-_DB_PATH = pathlib.Path(_JSON_FILE).with_suffix(".db")
+# The database file path.  POINTS_DATA_FILE defaults to a .db path but accepts
+# a .json value for backwards compatibility (the extension is swapped to .db).
+_DB_FILE_RAW = os.environ.get("POINTS_DATA_FILE", "points_are_bad_data.db")
+_DB_PATH = pathlib.Path(_DB_FILE_RAW).with_suffix(".db")
 DATA_DB_FILE = str(_DB_PATH)
-DATA_FILE = _JSON_FILE  # kept for backward compat with test imports
+DATA_FILE = DATA_DB_FILE  # kept for backward compat with test imports
+_JSON_PATH = _DB_PATH.with_suffix(".json")  # legacy migration source
 
 # Current schema version — bump when changing the SQLite schema.
 _SCHEMA_VERSION = 1
@@ -274,13 +276,12 @@ def load_data() -> GameData:
     the JSON data is migrated into SQLite automatically.
     """
     db_path = pathlib.Path(DATA_DB_FILE)
-    json_path = pathlib.Path(_JSON_FILE)
 
     # First run: no DB yet
     if not db_path.exists():
         init_db()
-        if json_path.exists():
-            _migrate_json_to_sqlite(json_path)
+        if _JSON_PATH.exists():
+            _migrate_json_to_sqlite(_JSON_PATH)
 
     conn = _get_conn()
     try:
@@ -412,18 +413,18 @@ def save_data(data: GameData) -> None:
 def _ensure_db() -> None:
     """Create the database and tables if they don't exist.  Idempotent.
 
-    On first run, the legacy JSON file (if present) is migrated into
-    SQLite.  The rename of the JSON file is atomic, so racing workers
-    will either find the file already gone or hit an integrity error
-    on the duplicate INSERT — both cases are caught and are harmless.
+    On first run, a legacy JSON file (if present) is migrated into
+    SQLite.  The renamed ``.json.migrated`` file is atomic, so racing
+    workers will either find the file already gone or hit an integrity
+    error on the duplicate INSERT — both cases are caught and are
+    harmless.
     """
     if not pathlib.Path(DATA_DB_FILE).exists():
         init_db()
-    json_path = pathlib.Path(_JSON_FILE)
-    if json_path.exists():
+    if _JSON_PATH.exists():
         with suppress(FileNotFoundError, sqlite3.IntegrityError):
             # Racing worker already completed the migration.
-            _migrate_json_to_sqlite(json_path)
+            _migrate_json_to_sqlite(_JSON_PATH)
 
 
 def find_race(race_name: str) -> dict[str, Any] | None:

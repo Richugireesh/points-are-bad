@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture(autouse=True)
-def isolated_test_db(tmp_path: "Path", monkeypatch: pytest.MonkeyPatch) -> None:
+def isolated_test_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Redirect storage to a temp SQLite database for every test session.
 
     This fixture is autouse — it ensures **no** test can accidentally read
@@ -35,5 +35,5 @@ def isolated_test_db(tmp_path: "Path", monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(storage_module, "DATA_DB_FILE", db_file)
     monkeypatch.setattr(storage_module, "DATA_FILE", db_file)
-    monkeypatch.setattr(storage_module, "_JSON_FILE", str(tmp_path / "nonexistent.json"))
+    monkeypatch.setattr(storage_module, "_JSON_PATH", tmp_path / "nonexistent.json")
     monkeypatch.setattr(storage_module, "_DB_PATH", db_path)

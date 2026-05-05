@@ -1,6 +1,7 @@
 """Tests for points_are_bad.storage."""
 
 import os
+import pathlib
 import sqlite3
 import threading
 
@@ -247,7 +248,7 @@ class TestEnsureDb:
     def test_autocreates_db_when_missing(self, isolated_db, monkeypatch):
         """_ensure_db should create the DB and tables when they don't exist."""
         # No JSON file to migrate
-        monkeypatch.setattr(storage_module, "_JSON_FILE", "/nonexistent/path.json")
+        monkeypatch.setattr(storage_module, "_JSON_PATH", pathlib.Path("/nonexistent/path.json"))
         assert not os.path.exists(isolated_db)
         # Calling a targeted op triggers _ensure_db
         add_player("alice")
